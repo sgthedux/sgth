@@ -76,7 +76,7 @@ export function AuthForm() {
         options: {
           data: {
             full_name: name,
-            role: "user", // Aseguramos que el rol esté en los metadato
+            role: "user", // Aseguramos que el rol esté en los metadatos
           },
           emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/auth/callback`,
         },
