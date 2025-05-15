@@ -69,7 +69,7 @@ export function AuthForm() {
     }
 
     try {
-      // Create the user with metadata
+      // Create the user with meta
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
