@@ -55,7 +55,7 @@ export default function Home() {
               </div>
               <div className="flex justify-center">
                 <Image
-                  src="/images/talento-humano.png"
+                  src="/images/team-planning.webp"
                   alt="Equipo planificando gestión de talento"
                   width={600}
                   height={400}
