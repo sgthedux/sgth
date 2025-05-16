@@ -92,23 +92,51 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
       setIsSigningOut(true)
       console.log("Iniciando cierre de sesión...")
 
-      // Usar el método signOut de Supabase
-      const { error } = await supabase.auth.signOut()
+      // Primero verificar si hay una sesión activa
+      const { data: sessionData } = await supabase.auth.getSession()
 
-      if (error) {
-        console.error("Error al cerrar sesión:", error.message)
-        setIsSigningOut(false)
+      if (!sessionData.session) {
+        console.log("No hay sesión activa, redirigiendo directamente...")
+        // Si no hay sesión, simplemente redirigir
+        window.location.href = `/auth/login?t=${Date.now()}`
         return
       }
 
+      // Limpiar cookies manualmente
+      document.cookie.split(";").forEach((c) => {
+        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/")
+      })
+
+      // Intentar cerrar sesión con manejo de errores
+      try {
+        await supabase.auth.signOut({ scope: "local" })
+        console.log("Sesión cerrada localmente")
+      } catch (signOutError) {
+        console.warn("Error al cerrar sesión localmente:", signOutError)
+        // Continuar con la redirección incluso si hay error
+      }
+
+      // Limpiar localStorage
+      localStorage.removeItem("supabase.auth.token")
+      localStorage.removeItem("supabase.auth.expires_at")
+
+      // Pequeña pausa para asegurar que todo se limpie
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
       console.log("Sesión cerrada correctamente, redirigiendo...")
 
-      // Forzar la redirección directamente con window.location
-      // Añadir un parámetro de tiempo para evitar problemas de caché
+      // Forzar la redirección con recarga completa
       window.location.href = `/auth/login?t=${Date.now()}`
     } catch (error) {
       console.error("Error inesperado al cerrar sesión:", error)
-      setIsSigningOut(false)
+
+      // Incluso si hay error, intentar redirigir
+      try {
+        window.location.href = `/auth/login?t=${Date.now()}&error=true`
+      } catch (redirectError) {
+        console.error("Error al redirigir:", redirectError)
+        setIsSigningOut(false)
+      }
     }
   }, [supabase])
 
