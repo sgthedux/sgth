@@ -4,6 +4,13 @@ function mm2pt(mm: number): number {
   return mm * 2.83465
 }
 
+// Añadir constante para la posición del logo
+const LOGO_POSITION = {
+  x: mm2pt(148), // Posición X aproximada donde dice "entidad receptora"
+  y: mm2pt(253), // Posición Y aproximada donde dice "entidad receptora"
+  maxWidth: mm2pt(53), // 150px convertidos a puntos (aproximadamente 53mm)
+}
+
 /* ────────────────  PÁGINA 1  ──────────────── */
 const P1 = {
   /* Datos personales */
@@ -107,8 +114,8 @@ const getExpCoords = (index: number) => {
   return {
     empresa: { x: mm2pt(30), y: mm2pt(baseY - 15) },
     sectorPublico: { x: mm2pt(120), y: mm2pt(baseY - 15) },
-    sectorPrivado: { x: mm2pt(135), y: mm2pt(baseY - 15) }, 
-    pais: { x: mm2pt(171), y: mm2pt(baseY - 15) },   
+    sectorPrivado: { x: mm2pt(135), y: mm2pt(baseY - 15) },
+    pais: { x: mm2pt(171), y: mm2pt(baseY - 15) },
     departamento: { x: mm2pt(30), y: mm2pt(baseY - 25) },
     municipio: { x: mm2pt(90), y: mm2pt(baseY - 25) },
     correoEmpresa: { x: mm2pt(150), y: mm2pt(baseY - 25) },
@@ -127,7 +134,6 @@ const getExpCoords = (index: number) => {
 
 /* ────────────────  PÁGINA 3  ──────────────── */
 const P3 = {
-  
   ciudadFecha: { x: mm2pt(110), y: mm2pt(120) },
 
   // Experiencia por sector
@@ -157,6 +163,42 @@ export async function generatePdf(userData: any, educationData: any[], experienc
     const page1 = pages[0]
     const page2 = pages[1]
     const page3 = pages[2]
+
+    // Cargar el logo
+    try {
+      const logoUrl = "/images/logo.png" // Ruta relativa al logo
+      const logoResponse = await fetch(logoUrl)
+      if (!logoResponse.ok) {
+        throw new Error(`Error al cargar el logo: ${logoResponse.status}`)
+      }
+
+      const logoBytes = await logoResponse.arrayBuffer()
+      const logoImage = await pdfDoc.embedPng(logoBytes)
+
+      // Calcular dimensiones manteniendo la proporción
+      const { width, height } = logoImage.scale(1)
+      let scaleFactor = 1
+
+      if (width > LOGO_POSITION.maxWidth) {
+        scaleFactor = LOGO_POSITION.maxWidth / width
+      }
+
+      const scaledWidth = width * scaleFactor
+      const scaledHeight = height * scaleFactor
+
+      // Insertar el logo en la primera página
+      page1.drawImage(logoImage, {
+        x: LOGO_POSITION.x,
+        y: LOGO_POSITION.y - scaledHeight, // Ajustar Y para que la imagen se dibuje hacia abajo desde el punto de referencia
+        width: scaledWidth,
+        height: scaledHeight,
+      })
+
+      console.log("Logo insertado correctamente en el PDF")
+    } catch (logoError) {
+      console.error("Error al procesar el logo:", logoError)
+      // Continuar con la generación del PDF sin el logo
+    }
 
     // Configurar la fuente
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
