@@ -8,7 +8,6 @@ import {
   User,
   FileText,
   Users,
-  FileCheck,
   Briefcase,
   GraduationCap,
   Languages,
@@ -90,19 +89,26 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
 
   const handleSignOut = useCallback(async () => {
     try {
+      setIsSigningOut(true)
       console.log("Iniciando cierre de sesión...")
+
+      // Usar el método signOut de Supabase
       const { error } = await supabase.auth.signOut()
 
       if (error) {
         console.error("Error al cerrar sesión:", error.message)
+        setIsSigningOut(false)
         return
       }
 
       console.log("Sesión cerrada correctamente, redirigiendo...")
+
       // Forzar la redirección directamente con window.location
-      window.location.href = "/auth/login"
+      // Añadir un parámetro de tiempo para evitar problemas de caché
+      window.location.href = `/auth/login?t=${Date.now()}`
     } catch (error) {
       console.error("Error inesperado al cerrar sesión:", error)
+      setIsSigningOut(false)
     }
   }, [supabase])
 
@@ -160,7 +166,7 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
       title: "Usuarios",
       href: "/admin/users",
       icon: <Users className="h-5 w-5" />,
-    },    
+    },
     {
       title: "Reportes",
       href: "/admin/reports",
@@ -187,6 +193,7 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
             routes={routes}
             activeGroup={activeGroup}
             toggleGroup={toggleGroup}
+            isSigningOut={isSigningOut}
           />
         </SheetContent>
       </Sheet>
@@ -273,11 +280,7 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
             <Button
               variant="outline"
               className="w-full justify-start gap-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              onClick={async () => {
-                setIsSigningOut(true)
-                await handleSignOut()
-                setIsSigningOut(false)
-              }}
+              onClick={handleSignOut}
               disabled={isSigningOut}
             >
               {isSigningOut ? (
@@ -305,12 +308,14 @@ const MobileSidebar = memo(function MobileSidebar({
   routes,
   activeGroup,
   toggleGroup,
+  isSigningOut = false,
 }: {
   isAdmin?: boolean
   onSignOut: () => void
   routes: any[]
   activeGroup: string | null
   toggleGroup: (title: string) => void
+  isSigningOut?: boolean
 }) {
   const pathname = usePathname()
 
@@ -392,12 +397,20 @@ const MobileSidebar = memo(function MobileSidebar({
         <Button
           variant="outline"
           className="w-full justify-start gap-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          onClick={async () => {
-            await onSignOut()
-          }}
+          onClick={onSignOut}
+          disabled={isSigningOut}
         >
-          <LogOut className="h-4 w-4" />
-          Cerrar sesión
+          {isSigningOut ? (
+            <>
+              <span className="h-4 w-4 animate-spin">◌</span>
+              Cerrando sesión...
+            </>
+          ) : (
+            <>
+              <LogOut className="h-4 w-4" />
+              Cerrar sesión
+            </>
+          )}
         </Button>
       </div>
     </div>
