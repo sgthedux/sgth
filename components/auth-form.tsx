@@ -22,12 +22,42 @@ export function AuthForm() {
   const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
 
+  const [loadingState, setLoadingState] = useState<
+    "idle" | "authenticating" | "verifying_role" | "redirecting" | "timeout"
+  >("idle")
+  const [loadingTimer, setLoadingTimer] = useState<NodeJS.Timeout | null>(null)
+  const [loadingProgress, setLoadingProgress] = useState(0)
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setLoadingState("authenticating")
+    setLoadingProgress(10)
     setError(null)
 
+    // Configurar un temporizador para detectar si el proceso se queda atascado
+    const timer = setTimeout(() => {
+      setLoadingState("timeout")
+      setError("La solicitud está tardando más de lo esperado. ¿Desea intentar nuevamente?")
+      setLoading(false)
+    }, 15000) // 15 segundos de tiempo máximo
+
+    setLoadingTimer(timer)
+
+    // Configurar un intervalo para actualizar el progreso visual
+    const progressInterval = setInterval(() => {
+      setLoadingProgress((prev) => {
+        if (prev >= 90) {
+          clearInterval(progressInterval)
+          return prev
+        }
+        return prev + 5
+      })
+    }, 500)
+
     try {
+      // Autenticación básica
+      setLoadingProgress(30)
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -37,22 +67,37 @@ export function AuthForm() {
         throw error
       }
 
+      setLoadingProgress(60)
+      setLoadingState("verifying_role")
+
       // Verificar el rol del usuario para redirigir correctamente
       const { data: userData } = await supabase.from("profiles").select("role").eq("id", data.session?.user.id).single()
 
       console.log("Auth form - User role:", userData?.role) // Para depuración
 
+      setLoadingProgress(80)
+      setLoadingState("redirecting")
+
+      // Forzar actualización de la sesión en el cliente
+      await supabase.auth.refreshSession()
+
+      // Usar window.location para una redirección más forzada en lugar de router.push
       if (userData?.role === "admin") {
-        router.push("/admin/dashboard")
+        window.location.href = "/admin/dashboard"
       } else {
-        router.push("/dashboard")
+        window.location.href = "/dashboard"
       }
 
-      router.refresh()
+      setLoadingProgress(100)
+      // No llamamos a router.refresh() ya que estamos haciendo una redirección completa
     } catch (error: any) {
       console.error("Error during sign in:", error)
       setError(error.message || "Error al iniciar sesión")
     } finally {
+      if (loadingTimer) {
+        clearTimeout(loadingTimer)
+      }
+      clearInterval(progressInterval)
       setLoading(false)
     }
   }
@@ -69,7 +114,7 @@ export function AuthForm() {
     }
 
     try {
-      // Create the user with meta
+      // Create the user with metadata
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -78,7 +123,7 @@ export function AuthForm() {
             full_name: name,
             role: "user", // Aseguramos que el rol esté en los metadatos
           },
-          emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/auth/callback`,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       })
 
@@ -95,6 +140,13 @@ export function AuthForm() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleRetry = () => {
+    setError(null)
+    setLoadingState("idle")
+    setLoadingProgress(0)
+    handleSignIn({ preventDefault: () => {} } as React.FormEvent)
   }
 
   return (
@@ -116,6 +168,11 @@ export function AuthForm() {
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{error}</AlertDescription>
+                  {loadingState === "timeout" && (
+                    <Button variant="outline" size="sm" className="mt-2" onClick={handleRetry}>
+                      Intentar nuevamente
+                    </Button>
+                  )}
                 </Alert>
               )}
               <div className="space-y-2">
@@ -142,8 +199,33 @@ export function AuthForm() {
             </CardContent>
             <CardFooter>
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Procesando..." : "Iniciar Sesión"}
+                {loading ? (
+                  <div className="flex items-center justify-center gap-2">
+                    {loadingState === "timeout" ? (
+                      "Reintentar"
+                    ) : (
+                      <>
+                        <span className="animate-pulse">
+                          {loadingState === "authenticating" && "Verificando credenciales..."}
+                          {loadingState === "verifying_role" && "Verificando permisos..."}
+                          {loadingState === "redirecting" && "Redirigiendo..."}
+                        </span>
+                        <span className="ml-2 text-xs">{loadingProgress}%</span>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  "Iniciar Sesión"
+                )}
               </Button>
+              {loading && loadingState !== "timeout" && (
+                <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2 dark:bg-gray-700">
+                  <div
+                    className="bg-primary h-1.5 rounded-full transition-all duration-300 ease-in-out"
+                    style={{ width: `${loadingProgress}%` }}
+                  ></div>
+                </div>
+              )}
             </CardFooter>
           </form>
         </Card>

@@ -750,56 +750,7 @@ export default function ReportsPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Reportes</h1>
         <p className="text-muted-foreground">Genera reportes del sistema</p>
-      </div>
-
-      <div className="mb-6">
-        <Label htmlFor="report-period">Período de reporte</Label>
-        {reportPeriods.length > 0 ? (
-          <Select value={selectedPeriodId} onValueChange={setSelectedPeriodId}>
-            <SelectTrigger id="report-period" className="w-full md:w-[300px]">
-              <SelectValue placeholder="Selecciona un período" />
-            </SelectTrigger>
-            <SelectContent>
-              {reportPeriods.map((period) => (
-                <SelectItem key={period.id} value={period.id}>
-                  {period.year} - Semestre {period.semester} {period.is_active ? "(Activo)" : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <div className="flex items-center gap-4 mt-2">
-            <div className="w-24">
-              <Select value={currentYear} onValueChange={setCurrentYear}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Año" />
-                </SelectTrigger>
-                <SelectContent>
-                  {[...Array(5)].map((_, i) => {
-                    const year = (new Date().getFullYear() - 2 + i).toString()
-                    return (
-                      <SelectItem key={year} value={year}>
-                        {year}
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-32">
-              <Select value={currentSemester} onValueChange={setCurrentSemester}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Semestre" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">Semestre 1</SelectItem>
-                  <SelectItem value="2">Semestre 2</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        )}
-      </div>
+      </div>    
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>

@@ -55,7 +55,7 @@ export async function middleware(request: NextRequest) {
   )
 
   try {
-    // Verificar si hay una sesión activa
+    // Verificar si hay una sesión activa - usar getSession() que es más eficiente
     const {
       data: { session },
     } = await supabase.auth.getSession()
@@ -71,8 +71,11 @@ export async function middleware(request: NextRequest) {
 
     // Verificar si la ruta actual es /auth/login y el usuario ya está autenticado
     if (request.nextUrl.pathname === "/auth/login" && session) {
+      // Obtener el rol directamente de los metadatos del usuario si está disponible
+      const userRole = session.user.user_metadata?.role || "user"
+
       // Redirigir a los usuarios autenticados fuera de la página de login
-      const redirectUrl = new URL("/dashboard", request.url)
+      const redirectUrl = new URL(userRole === "admin" ? "/admin/dashboard" : "/dashboard", request.url)
       return NextResponse.redirect(redirectUrl)
     }
 

@@ -28,6 +28,12 @@ export default function LoginPage() {
     try {
       setIsLoading(true)
 
+      // Mostrar toast de inicio del proceso
+      toast({
+        title: "Iniciando sesión",
+        description: "Verificando credenciales...",
+      })
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -37,6 +43,12 @@ export default function LoginPage() {
         throw error
       }
 
+      // Actualizar toast
+      toast({
+        title: "Autenticación exitosa",
+        description: "Verificando permisos de usuario...",
+      })
+
       // Verificar el rol del usuario para redirigir correctamente
       if (data.user) {
         // Primero intentamos obtener el rol de los metadatos
@@ -44,6 +56,11 @@ export default function LoginPage() {
 
         // Si no está en los metadatos, lo obtenemos de la tabla profiles
         if (!role) {
+          toast({
+            title: "Obteniendo información",
+            description: "Cargando perfil de usuario...",
+          })
+
           const { data: profileData } = await supabase.from("profiles").select("role").eq("id", data.user.id).single()
 
           role = profileData?.role
@@ -55,6 +72,12 @@ export default function LoginPage() {
             })
           }
         }
+
+        // Actualizar toast final
+        toast({
+          title: "¡Bienvenido!",
+          description: role === "admin" ? "Redirigiendo al panel de administración..." : "Redirigiendo al dashboard...",
+        })
 
         // Redirigir según el rol
         if (role === "admin") {

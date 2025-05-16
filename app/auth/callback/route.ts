@@ -32,11 +32,14 @@ export async function GET(request: Request) {
           data: { role },
         })
 
+        // Forzar una redirección completa con un parámetro de tiempo para evitar caché
+        const timestamp = Date.now()
+
         // Redirigimos según el rol
         if (role === "admin") {
-          return NextResponse.redirect(new URL("/admin/dashboard", requestUrl.origin))
+          return NextResponse.redirect(new URL(`/admin/dashboard?t=${timestamp}`, requestUrl.origin))
         } else {
-          return NextResponse.redirect(new URL("/dashboard", requestUrl.origin))
+          return NextResponse.redirect(new URL(`/dashboard?t=${timestamp}`, requestUrl.origin))
         }
       } catch (error) {
         console.error("Error setting user role in metadata:", error)

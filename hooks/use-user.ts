@@ -27,13 +27,26 @@ export function useUser() {
           console.error("Error loading user session:", error)
           if (isMounted) {
             setLoading(false)
-            router.push("/auth/login")
+            // Usar window.location para una redirección más forzada
+            window.location.href = "/auth/login"
           }
           return
         }
 
         if (isMounted) {
           setUser(session.user)
+
+          // Verificar si estamos en la página correcta según el rol
+          const userRole = session.user.user_metadata?.role || "user"
+          const currentPath = window.location.pathname
+
+          // Si estamos en una página incorrecta, redirigir
+          if (userRole === "admin" && !currentPath.startsWith("/admin")) {
+            window.location.href = "/admin/dashboard"
+          } else if (userRole !== "admin" && currentPath.startsWith("/admin")) {
+            window.location.href = "/dashboard"
+          }
+
           setLoading(false)
         }
       } catch (error) {

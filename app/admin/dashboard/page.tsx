@@ -2,9 +2,7 @@ export const dynamic = "force-dynamic"
 
 import type React from "react"
 import type { Metadata } from "next"
-import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
-import { createServerClient } from "@supabase/ssr"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -12,6 +10,7 @@ import { FileText, Users, BarChart, Clock, CheckCircle, AlertCircle, Info } from
 import Link from "next/link"
 import Image from "next/image"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { createClient } from "@/lib/supabase/server"
 
 export const metadata: Metadata = {
   title: "Dashboard Administrativo | SGTH",
@@ -20,40 +19,33 @@ export const metadata: Metadata = {
 
 async function getAdminData() {
   try {
-    // Crear el cliente de Supabase directamente en esta función
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get: async (name) => (await cookieStore.get(name))?.value,
-          set: async (name, value, options) => {
-            await cookieStore.set({ name, value, ...options })
-          },
-          remove: async (name, options) => {
-            await cookieStore.set({ name, value: "", ...options })
-          },
-        },
-      },
-    )
+    // Usar el cliente de Supabase mejorado desde lib/supabase/server
+    const supabase = await createClient()
 
-    // Verificar la sesión
+    // Verificar la sesión con manejo de errores mejorado
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
 
     if (sessionError) {
       console.error("Error al obtener la sesión:", sessionError)
-      redirect("/auth/login")
+      return {
+        redirect: true,
+        error: "session_error",
+        message: sessionError.message,
+      }
     }
 
     if (!sessionData.session) {
       console.log("No hay sesión activa")
-      redirect("/auth/login")
+      return {
+        redirect: true,
+        error: "no_session",
+        message: "No hay sesión activa",
+      }
     }
 
     const userId = sessionData.session.user.id
 
-    // Verificar el rol del usuario
+    // Verificar el rol del usuario con manejo de errores mejorado
     const { data: profileData, error: profileError } = await supabase
       .from("profiles")
       .select("*")
@@ -62,39 +54,74 @@ async function getAdminData() {
 
     if (profileError) {
       console.error("Error al obtener el perfil:", profileError)
-      redirect("/dashboard")
+      return {
+        redirect: true,
+        error: "profile_error",
+        message: profileError.message,
+      }
     }
 
     if (profileData?.role !== "admin") {
       console.log("Usuario no es administrador:", profileData?.role)
-      redirect("/dashboard")
+      return {
+        redirect: true,
+        error: "not_admin",
+        message: "El usuario no tiene permisos de administrador",
+      }
     }
 
-    // Obtener estadísticas
-    const { count: usersCount } = await supabase.from("profiles").select("*", { count: "exact", head: true })
+    // Obtener estadísticas con manejo de errores mejorado
+    const { count: usersCount, error: usersError } = await supabase
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
 
-    const { count: documentsCount } = await supabase.from("documents").select("*", { count: "exact", head: true })
+    if (usersError) {
+      console.error("Error al obtener conteo de usuarios:", usersError)
+    }
 
-    // Obtener usuarios recientes
-    const { data: recentUsers } = await supabase
+    const { count: documentsCount, error: documentsError } = await supabase
+      .from("documents")
+      .select("*", { count: "exact", head: true })
+
+    if (documentsError) {
+      console.error("Error al obtener conteo de documentos:", documentsError)
+    }
+
+    // Obtener usuarios recientes con manejo de errores mejorado
+    const { data: recentUsers, error: recentUsersError } = await supabase
       .from("profiles")
       .select("id, full_name, email, created_at, avatar_url")
       .order("created_at", { ascending: false })
       .limit(5)
 
-    // Obtener documentos recientes
-    const { data: recentDocuments } = await supabase
+    if (recentUsersError) {
+      console.error("Error al obtener usuarios recientes:", recentUsersError)
+    }
+
+    // Obtener documentos recientes con manejo de errores mejorado
+    const { data: recentDocuments, error: recentDocumentsError } = await supabase
       .from("documents")
       .select("id, name, status, created_at, user_id")
       .order("created_at", { ascending: false })
       .limit(5)
 
+    if (recentDocumentsError) {
+      console.error("Error al obtener documentos recientes:", recentDocumentsError)
+    }
+
     // Obtener nombres de usuarios para los documentos
     const userIds = recentDocuments?.map((doc) => doc.user_id) || []
-    let userMap: Record<string, any> = {}
+    let userMap = {}
 
     if (userIds.length > 0) {
-      const { data: users } = await supabase.from("profiles").select("id, full_name, email").in("id", userIds)
+      const { data: users, error: usersMapError } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", userIds)
+
+      if (usersMapError) {
+        console.error("Error al obtener mapa de usuarios:", usersMapError)
+      }
 
       userMap = (users || []).reduce((acc, user) => {
         acc[user.id] = user
@@ -103,6 +130,7 @@ async function getAdminData() {
     }
 
     return {
+      redirect: false,
       profile: profileData,
       user: sessionData.session.user,
       stats: {
@@ -117,12 +145,24 @@ async function getAdminData() {
     }
   } catch (error) {
     console.error("Error en getAdminData:", error)
-    redirect("/auth/login?error=server_error")
+    return {
+      redirect: true,
+      error: "server_error",
+      message: error instanceof Error ? error.message : "Error desconocido",
+    }
   }
 }
 
 export default async function AdminDashboardPage() {
-  const { profile, user, stats, recentUsers, recentDocuments, userMap } = await getAdminData()
+  const adminData = await getAdminData()
+
+  // Manejar redirección si es necesario
+  if (adminData.redirect) {
+    console.log(`Redirigiendo: ${adminData.error} - ${adminData.message}`)
+    redirect("/auth/login?error=" + adminData.error)
+  }
+
+  const { profile, user, stats, recentUsers, recentDocuments, userMap } = adminData
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6 animate-fade-in">
@@ -449,8 +489,8 @@ function Avatar({ className, ...props }: React.ComponentProps<"div"> & { classNa
   return <div className={cn("relative h-10 w-10 rounded-full overflow-hidden", className)} {...props} />
 }
 
-function AvatarImage({ className, width = 96, height = 96, ...props }: React.ComponentProps<typeof Image> & { className?: string; width?: number; height?: number }) {
-  return <Image className={cn("aspect-square h-full w-full object-cover", className)} width={width} height={height} {...props} />
+function AvatarImage({ className, ...props }: React.ComponentProps<typeof Image> & { className?: string }) {
+  return <Image className={cn("aspect-square h-full w-full object-cover", className)} {...props} />
 }
 
 function AvatarFallback({ className, ...props }: React.ComponentProps<"div"> & { className?: string }) {
