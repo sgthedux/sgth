@@ -16,6 +16,7 @@ import {
   LogOut,
   Menu,
   X,
+  FolderOpen,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -181,6 +182,11 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
       title: "Hoja de Vida",
       href: "/dashboard/cv",
       icon: <FileText className="h-5 w-5" />,
+    },
+    {
+      title: "Documentos",
+      href: "/dashboard/documents",
+      icon: <FolderOpen className="h-5 w-5" />,
     },
   ]
 
