@@ -1,4 +1,4 @@
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,13 +9,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-// Forzar renderizado dinámico si se usan cookies o searchParams
-export const dynamic = "force-dynamic"
-
 export default async function UserDetailPage({ params }: { params: { id: string } }) {
   try {
-    // Crear cliente de Supabase usando el helper correcto para Next.js
-    const supabase = createClientComponentClient()
+    // Crear cliente de Supabase directamente
+    const supabase = await createClient()
 
     // Verificar sesión
     const {

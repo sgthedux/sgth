@@ -2,6 +2,7 @@
 
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useEffect } from "react"
 
 interface CvPreviewProps {
   profile: any
@@ -20,6 +21,31 @@ export function CvPreview({ profile, personalInfo, education, experience, langua
       .toString()
       .padStart(2, "0")}/${date.getFullYear()}`
   }
+
+  // Log de datos para depuración
+  useEffect(() => {
+    console.log("CvPreview - Datos recibidos:", {
+      profile,
+      personalInfo,
+      education: education?.length || 0,
+      experience: experience?.length || 0,
+      languages: languages?.length || 0,
+    })
+
+    // Log detallado de cada tipo de dato
+    if (personalInfo) {
+      console.log("Datos personales:", personalInfo)
+    }
+    if (education && education.length > 0) {
+      console.log("Datos de educación:", education)
+    }
+    if (experience && experience.length > 0) {
+      console.log("Datos de experiencia:", experience)
+    }
+    if (languages && languages.length > 0) {
+      console.log("Datos de idiomas:", languages)
+    }
+  }, [profile, personalInfo, education, experience, languages])
 
   return (
     <div className="border rounded-lg p-6 space-y-6">

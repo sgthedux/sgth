@@ -1,26 +1,23 @@
 "use client"
 
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { FileDown } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useState } from "react"
+import { Download, Loader2 } from "lucide-react"
+import { useToast } from "@/components/ui/use-toast"
 
 interface GeneratePdfButtonProps {
   userId: string
 }
 
 export function GeneratePdfButton({ userId }: GeneratePdfButtonProps) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const { toast } = useToast()
 
   const handleGeneratePdf = async () => {
     try {
-      setIsLoading(true)
-      setError(null)
-      setSuccess(false)
+      setLoading(true)
+      console.log("Generando PDF para el usuario:", userId)
 
-      // Llamar a la API para generar el PDF
       const response = await fetch("/api/generate-pdf", {
         method: "POST",
         headers: {
@@ -34,54 +31,55 @@ export function GeneratePdfButton({ userId }: GeneratePdfButtonProps) {
         throw new Error(errorData.error || "Error al generar el PDF")
       }
 
-      // Obtener el blob del PDF
+      // Verificar que la respuesta contiene datos
       const blob = await response.blob()
+      if (blob.size === 0) {
+        throw new Error("El PDF generado está vacío")
+      }
 
-      // Crear una URL para el blob
+      console.log("PDF generado correctamente, tamaño:", blob.size)
+
+      // Crear URL para descargar el PDF
       const url = window.URL.createObjectURL(blob)
-
-      // Crear un enlace temporal para descargar el archivo
       const a = document.createElement("a")
       a.href = url
-      a.download = `hoja_de_vida_${new Date().toISOString().split("T")[0]}.pdf`
+      a.download = `hoja_de_vida_${new Date().getTime()}.pdf`
       document.body.appendChild(a)
       a.click()
-
-      // Limpiar
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
 
-      setSuccess(true)
-    } catch (err: any) {
-      console.error("Error al generar PDF:", err)
-      setError(err.message || "Error al generar el PDF")
+      toast({
+        title: "PDF generado correctamente",
+        description: "Tu hoja de vida ha sido generada y descargada.",
+        duration: 5000,
+      })
+    } catch (error: any) {
+      console.error("Error al generar PDF:", error)
+      toast({
+        title: "Error al generar PDF",
+        description: error.message || "Ocurrió un error al generar el PDF",
+        variant: "destructive",
+        duration: 5000,
+      })
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <Button onClick={handleGeneratePdf} disabled={isLoading} className="flex items-center gap-2">
-        <FileDown className="h-4 w-4" />
-        {isLoading ? "Generando..." : "Descargar Formato Único de Hoja de Vida"}
-      </Button>
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+    <Button onClick={handleGeneratePdf} disabled={loading} className="w-full sm:w-auto">
+      {loading ? (
+        <>
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Generando...
+        </>
+      ) : (
+        <>
+          <Download className="mr-2 h-4 w-4" />
+          Generar y Descargar PDF
+        </>
       )}
-
-      {success && (
-        <Alert variant="success" className="bg-green-50 border-green-200 text-green-800">
-          <AlertDescription>PDF generado y descargado correctamente.</AlertDescription>
-        </Alert>
-      )}
-
-      <p className="text-xs text-muted-foreground mt-1">
-        Descarga el formato con tus datos prellenados. Luego deberás firmarlo y subirlo en la sección de documentos.
-      </p>
-    </div>
+    </Button>
   )
 }

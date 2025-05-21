@@ -98,6 +98,17 @@ async function getAdminData() {
       console.error("Error al obtener usuarios recientes:", recentUsersError)
     }
 
+    // Obtener TODOS los usuarios para el dashboard completo
+    const { data: allUsers, error: allUsersError } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, created_at, avatar_url, role, status")
+      .order("created_at", { ascending: false })
+      .limit(100) // Limitamos a 100 para evitar problemas de rendimiento, pero es un límite alto
+
+    if (allUsersError) {
+      console.error("Error al obtener todos los usuarios:", allUsersError)
+    }
+
     // Obtener documentos recientes con manejo de errores mejorado
     const { data: recentDocuments, error: recentDocumentsError } = await supabase
       .from("documents")
@@ -109,8 +120,25 @@ async function getAdminData() {
       console.error("Error al obtener documentos recientes:", recentDocumentsError)
     }
 
+    // Obtener TODOS los documentos para el dashboard completo
+    const { data: allDocuments, error: allDocumentsError } = await supabase
+      .from("documents")
+      .select("id, name, status, created_at, user_id, type, public_url")
+      .order("created_at", { ascending: false })
+      .limit(100) // Limitamos a 100 para evitar problemas de rendimiento, pero es un límite alto
+
+    if (allDocumentsError) {
+      console.error("Error al obtener todos los documentos:", allDocumentsError)
+    }
+
     // Obtener nombres de usuarios para los documentos
-    const userIds = recentDocuments?.map((doc) => doc.user_id) || []
+    const userIds = [
+      ...new Set([
+        ...(recentDocuments?.map((doc) => doc.user_id) || []),
+        ...(allDocuments?.map((doc) => doc.user_id) || []),
+      ]),
+    ].filter(Boolean)
+
     let userMap = {}
 
     if (userIds.length > 0) {
@@ -136,11 +164,13 @@ async function getAdminData() {
       stats: {
         usersCount: usersCount || 0,
         documentsCount: documentsCount || 0,
-        pendingDocuments: recentDocuments?.filter((doc) => doc.status === "pending").length || 0,
-        activeUsers: usersCount || 0, // Podríamos refinar esto con una consulta más específica
+        pendingDocuments: allDocuments?.filter((doc) => doc.status === "pending").length || 0,
+        activeUsers: allUsers?.filter((user) => user.status === "active").length || 0,
       },
       recentUsers: recentUsers || [],
       recentDocuments: recentDocuments || [],
+      allUsers: allUsers || [],
+      allDocuments: allDocuments || [],
       userMap,
     }
   } catch (error) {
@@ -162,7 +192,7 @@ export default async function AdminDashboardPage() {
     redirect("/auth/login?error=" + adminData.error)
   }
 
-  const { profile, user, stats, recentUsers, recentDocuments, userMap } = adminData
+  const { profile, user, stats, recentUsers, recentDocuments, allUsers, allDocuments, userMap } = adminData
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6 animate-fade-in">
@@ -363,12 +393,13 @@ export default async function AdminDashboardPage() {
                       <th className="p-2 text-left font-medium">Usuario</th>
                       <th className="p-2 text-left font-medium">Email</th>
                       <th className="p-2 text-left font-medium">Fecha de registro</th>
+                      <th className="p-2 text-left font-medium">Rol</th>
                       <th className="p-2 text-left font-medium">Estado</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {recentUsers && recentUsers.length > 0 ? (
-                      recentUsers.map((user) => (
+                    {allUsers && allUsers.length > 0 ? (
+                      allUsers.map((user) => (
                         <tr key={user.id} className="border-b">
                           <td className="p-2">
                             <div className="flex items-center gap-2">
@@ -388,17 +419,31 @@ export default async function AdminDashboardPage() {
                           </td>
                           <td className="p-2 truncate max-w-[200px]">{user.email}</td>
                           <td className="p-2">{new Date(user.created_at).toLocaleDateString()}</td>
+                          <td className="p-2">{user.role || "usuario"}</td>
                           <td className="p-2">
-                            <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-green-100 text-green-800">
-                              <CheckCircle className="mr-1 h-3 w-3" /> Activo
+                            <span
+                              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                                user.status === "active"
+                                  ? "bg-green-100 text-green-800"
+                                  : user.status === "inactive"
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                              }`}
+                            >
+                              <CheckCircle className="mr-1 h-3 w-3" />
+                              {user.status === "active"
+                                ? "Activo"
+                                : user.status === "inactive"
+                                  ? "Inactivo"
+                                  : "Pendiente"}
                             </span>
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={4} className="p-4 text-center text-muted-foreground">
-                          No hay usuarios registrados recientemente
+                        <td colSpan={5} className="p-4 text-center text-muted-foreground">
+                          No hay usuarios registrados
                         </td>
                       </tr>
                     )}
@@ -427,13 +472,14 @@ export default async function AdminDashboardPage() {
                     <tr className="border-b bg-muted/50">
                       <th className="p-2 text-left font-medium">Documento</th>
                       <th className="p-2 text-left font-medium">Usuario</th>
+                      <th className="p-2 text-left font-medium">Tipo</th>
                       <th className="p-2 text-left font-medium">Fecha</th>
                       <th className="p-2 text-left font-medium">Estado</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {recentDocuments && recentDocuments.length > 0 ? (
-                      recentDocuments.map((doc) => {
+                    {allDocuments && allDocuments.length > 0 ? (
+                      allDocuments.map((doc) => {
                         const docUser = userMap[doc.user_id] || { full_name: "Usuario desconocido", email: "" }
                         return (
                           <tr key={doc.id} className="border-b">
@@ -446,6 +492,7 @@ export default async function AdminDashboardPage() {
                             <td className="p-2 truncate max-w-[200px]">
                               {docUser.full_name || docUser.email || doc.user_id}
                             </td>
+                            <td className="p-2">{doc.type || "Documento"}</td>
                             <td className="p-2">{new Date(doc.created_at).toLocaleDateString()}</td>
                             <td className="p-2">
                               {doc.status === "approved" && (
@@ -469,8 +516,8 @@ export default async function AdminDashboardPage() {
                       })
                     ) : (
                       <tr>
-                        <td colSpan={4} className="p-4 text-center text-muted-foreground">
-                          No hay documentos subidos recientemente
+                        <td colSpan={5} className="p-4 text-center text-muted-foreground">
+                          No hay documentos subidos
                         </td>
                       </tr>
                     )}

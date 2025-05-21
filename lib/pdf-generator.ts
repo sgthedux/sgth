@@ -147,14 +147,42 @@ const P3 = {
   // Experiencia total
   aniosExperienciaTotal: { x: mm2pt(136), y: mm2pt(190 - 10) },
   mesesExperienciaTotal: { x: mm2pt(162), y: mm2pt(190 - 10) },
+
+  // Campos adicionales que faltaban
+  aniosExperiencia: { x: mm2pt(136), y: mm2pt(180 - 10) },
+  mesesExperiencia: { x: mm2pt(162), y: mm2pt(180 - 10) },
+  aniosExperiencia2: { x: mm2pt(136), y: mm2pt(170 - 10) },
+  mesesExperiencia2: { x: mm2pt(162), y: mm2pt(170 - 10) },
+
+  // Tipo de ocupación
+  ocupacionPublica: { x: mm2pt(29), y: mm2pt(150) },
+  ocupacionPrivada: { x: mm2pt(29), y: mm2pt(145) },
+  ocupacionIndependiente: { x: mm2pt(29), y: mm2pt(140) },
 }
 
 // Función para generar el PDF con los datos del usuario
 export async function generatePdf(userData: any, educationData: any[], experienceData: any[], languagesData: any[]) {
   try {
+    console.log("Generando PDF con datos:", {
+      userData: JSON.stringify(userData),
+      educationCount: educationData.length,
+      experienceCount: experienceData.length,
+      languagesCount: languagesData.length,
+    })
+
+    // Verificar que tenemos datos mínimos del usuario
+    if (!userData || Object.keys(userData).length === 0) {
+      throw new Error("No se encontró información del usuario")
+    }
+
     // Descargar el template desde la URL proporcionada
     const templateUrl = "https://pub-373d5369059842f8abf123c212109054.r2.dev/template.pdf"
     const templateResponse = await fetch(templateUrl)
+
+    if (!templateResponse.ok) {
+      throw new Error(`Error al descargar la plantilla: ${templateResponse.status}`)
+    }
+
     const templateBytes = await templateResponse.arrayBuffer()
 
     // Cargar el PDF
@@ -203,32 +231,45 @@ export async function generatePdf(userData: any, educationData: any[], experienc
     // Configurar la fuente
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
 
-    // Función para dibujar texto en el PDF
+    // Función para dibujar texto en el PDF con mejor manejo de errores
     const drawText = (text: string, coords: any, page: any, size = 10) => {
       if (!text || !coords) return
-      page.drawText(text, {
-        x: coords.x,
-        y: coords.y,
-        size: size,
-        font,
-        color: rgb(0, 0, 0),
-      })
+      try {
+        console.log(`Dibujando texto: "${text}" en coordenadas:`, coords)
+        page.drawText(String(text), {
+          x: coords.x,
+          y: coords.y,
+          size: size,
+          font,
+          color: rgb(0, 0, 0),
+        })
+      } catch (error) {
+        console.error(`Error al dibujar texto "${text}" en coordenadas:`, coords, error)
+        // Continuar con la ejecución en lugar de fallar todo el PDF
+      }
     }
 
     // Función para marcar casillas (X)
     const markCheckbox = (condition: boolean, coords: any, page: any, size = 10) => {
       if (!condition || !coords) return
-      page.drawText("X", {
-        x: coords.x,
-        y: coords.y,
-        size: size,
-        font,
-        color: rgb(0, 0, 0),
-      })
+      try {
+        console.log(`Marcando casilla en coordenadas:`, coords, condition ? "SÍ" : "NO")
+        page.drawText("X", {
+          x: coords.x,
+          y: coords.y,
+          size: size,
+          font,
+          color: rgb(0, 0, 0),
+        })
+      } catch (error) {
+        console.error(`Error al marcar casilla en coordenadas:`, coords, error)
+      }
     }
 
     // Llenar datos personales
     if (userData) {
+      console.log("Procesando datos personales:", userData)
+
       // Extraer nombres y apellidos
       let firstName = ""
       let lastName = ""
@@ -260,6 +301,8 @@ export async function generatePdf(userData: any, educationData: any[], experienc
           firstName = nameParts[0]
         }
       }
+
+      console.log("Nombres procesados:", { firstName, lastName, secondLastName })
 
       // Dibujar nombres y apellidos
       drawText(lastName, P1.primerApellido, page1)
@@ -331,6 +374,8 @@ export async function generatePdf(userData: any, educationData: any[], experienc
 
     // Llenar educación
     if (educationData && educationData.length > 0) {
+      console.log("Procesando datos de educación:", educationData)
+
       // Educación básica
       const basicEducation = educationData.find(
         (edu) =>
@@ -340,6 +385,8 @@ export async function generatePdf(userData: any, educationData: any[], experienc
       )
 
       if (basicEducation) {
+        console.log("Educación básica encontrada:", basicEducation)
+
         // Marcar nivel educativo
         const level = basicEducation.education_level || basicEducation.level || ""
         markCheckbox(level.toLowerCase().includes("primaria"), P1.nivelPrimaria, page1)
@@ -367,9 +414,12 @@ export async function generatePdf(userData: any, educationData: any[], experienc
           ),
       )
 
+      console.log("Educación superior encontrada:", higherEducation.length, "registros")
+
       // Primera educación superior
       if (higherEducation.length > 0) {
         const edu1 = higherEducation[0]
+        console.log("Procesando primera educación superior:", edu1)
 
         // Modalidad académica - Usar el campo academic_modality si existe
         const modalidad = edu1.academic_modality || getModalidadAcademica(edu1.education_level)
@@ -403,6 +453,7 @@ export async function generatePdf(userData: any, educationData: any[], experienc
       // Segunda educación superior
       if (higherEducation.length > 1) {
         const edu2 = higherEducation[1]
+        console.log("Procesando segunda educación superior:", edu2)
 
         // Modalidad académica - Usar el campo academic_modality si existe
         const modalidad = edu2.academic_modality || getModalidadAcademica(edu2.education_level)
@@ -436,9 +487,12 @@ export async function generatePdf(userData: any, educationData: any[], experienc
 
     // Llenar idiomas
     if (languagesData && languagesData.length > 0) {
+      console.log("Procesando datos de idiomas:", languagesData)
+
       // Primer idioma
       if (languagesData.length > 0) {
         const lang1 = languagesData[0]
+        console.log("Procesando primer idioma:", lang1)
 
         // Nombre del idioma
         drawText(lang1.language || lang1.name || "", P1.idioma1, page1)
@@ -465,6 +519,7 @@ export async function generatePdf(userData: any, educationData: any[], experienc
       // Segundo idioma
       if (languagesData.length > 1) {
         const lang2 = languagesData[1]
+        console.log("Procesando segundo idioma:", lang2)
 
         // Nombre del idioma
         drawText(lang2.language || lang2.name || "", P1.idioma2, page1)
@@ -491,6 +546,8 @@ export async function generatePdf(userData: any, educationData: any[], experienc
 
     // Llenar experiencia laboral
     if (experienceData && experienceData.length > 0) {
+      console.log("Procesando datos de experiencia:", experienceData)
+
       // Ordenar experiencias por fecha de inicio (más reciente primero)
       const sortedExperiences = [...experienceData].sort((a, b) => {
         const dateA = new Date(a.start_date || 0)
@@ -500,6 +557,8 @@ export async function generatePdf(userData: any, educationData: any[], experienc
 
       // Mostrar hasta 4 experiencias
       sortedExperiences.slice(0, 4).forEach((exp, index) => {
+        console.log(`Procesando experiencia ${index + 1}:`, exp)
+
         const coords = getExpCoords(index)
 
         // Empresa
@@ -555,6 +614,13 @@ export async function generatePdf(userData: any, educationData: any[], experienc
       // Calcular experiencia total (suma de todos los sectores)
       const totalExperience = calculateTotalExperience(experienceData)
 
+      console.log("Experiencia calculada:", {
+        public: publicExperience,
+        private: privateExperience,
+        independent: independentExperience,
+        total: totalExperience,
+      })
+
       // Escribir experiencia por sector (con verificación de coordenadas)
       if (P3.aniosExperienciaPublica && P3.mesesExperienciaPublica) {
         drawText(publicExperience.years.toString(), P3.aniosExperienciaPublica, page3)
@@ -578,12 +644,16 @@ export async function generatePdf(userData: any, educationData: any[], experienc
       }
 
       // Escribir tiempo total en página 3 (campos originales)
-      drawText(totalExperience.years.toString(), P3.aniosExperiencia, page3)
-      drawText(totalExperience.months.toString(), P3.mesesExperiencia, page3)
+      if (P3.aniosExperiencia && P3.mesesExperiencia) {
+        drawText(totalExperience.years.toString(), P3.aniosExperiencia, page3)
+        drawText(totalExperience.months.toString(), P3.mesesExperiencia, page3)
+      }
 
       // Repetir tiempo total en segunda sección
-      drawText(totalExperience.years.toString(), P3.aniosExperiencia2, page3)
-      drawText(totalExperience.months.toString(), P3.mesesExperiencia2, page3)
+      if (P3.aniosExperiencia2 && P3.mesesExperiencia2) {
+        drawText(totalExperience.years.toString(), P3.aniosExperiencia2, page3)
+        drawText(totalExperience.months.toString(), P3.mesesExperiencia2, page3)
+      }
 
       // Marcar tipo de ocupación
       let hasPublic = false
@@ -597,9 +667,9 @@ export async function generatePdf(userData: any, educationData: any[], experienc
         else if (sector.toLowerCase() === "independent") hasIndependent = true
       })
 
-      markCheckbox(hasPublic, P3.ocupacionPublica, page3)
-      markCheckbox(hasPrivate, P3.ocupacionPrivada, page3)
-      markCheckbox(hasIndependent, P3.ocupacionIndependiente, page3)
+      if (P3.ocupacionPublica) markCheckbox(hasPublic, P3.ocupacionPublica, page3)
+      if (P3.ocupacionPrivada) markCheckbox(hasPrivate, P3.ocupacionPrivada, page3)
+      if (P3.ocupacionIndependiente) markCheckbox(hasIndependent, P3.ocupacionIndependiente, page3)
 
       // Fecha de diligenciamiento
       const today = new Date()
@@ -612,7 +682,9 @@ export async function generatePdf(userData: any, educationData: any[], experienc
     }
 
     // Guardar el PDF
+    console.log("Guardando PDF...")
     const pdfBytes = await pdfDoc.save()
+    console.log("PDF generado correctamente")
     return pdfBytes
   } catch (error) {
     console.error("Error generando PDF:", error)

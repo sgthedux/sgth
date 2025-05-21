@@ -305,11 +305,15 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
           <TabsContent value="identification" className="space-y-6">
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Información Personal</h3>
+              <p className="text-sm text-blue-600 font-medium mb-4">Los campos con * son obligatorios</p>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="first-surname">Primer Apellido</Label>
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="first-surname">
+                    Primer Apellido
+                  </Label>
                   <Input
+                    className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
                     id="first-surname"
                     value={firstSurname}
                     onChange={(e) => setFirstSurname(e.target.value)}
@@ -318,28 +322,60 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="second-surname">Segundo Apellido</Label>
-                  <Input id="second-surname" value={secondSurname} onChange={(e) => setSecondSurname(e.target.value)} />
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="second-surname">
+                    Segundo Apellido
+                  </Label>
+                  <Input
+                    className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
+                    id="second-surname"
+                    value={secondSurname}
+                    onChange={(e) => setSecondSurname(e.target.value)}
+                  />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="first-name">Primer Nombre</Label>
-                  <Input id="first-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="first-name">
+                    Primer Nombre
+                  </Label>
+                  <Input
+                    className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
+                    id="first-name"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    required
+                  />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="middle-name">Segundo Nombre</Label>
-                  <Input id="middle-name" value={middleName} onChange={(e) => setMiddleName(e.target.value)} />
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="middle-name">
+                    Segundo Nombre
+                  </Label>
+                  <Input
+                    className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
+                    id="middle-name"
+                    value={middleName}
+                    onChange={(e) => setMiddleName(e.target.value)}
+                  />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="identification-type">Tipo de Documento</Label>
-                  <Select value={identificationType} onValueChange={setIdentificationType} required>
-                    <SelectTrigger id="identification-type">
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="identification-type">
+                    Tipo de Documento
+                  </Label>
+                  <Select
+                    className="border-2 rounded-md shadow-sm"
+                    value={identificationType}
+                    onValueChange={setIdentificationType}
+                    required
+                  >
+                    <SelectTrigger
+                      className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
+                      id="identification-type"
+                    >
                       <SelectValue placeholder="Seleccione un tipo" />
                     </SelectTrigger>
                     <SelectContent>
@@ -362,8 +398,11 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="identification-number">Número de Identificación</Label>
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="identification-number">
+                    Número de Identificación
+                  </Label>
                   <Input
+                    className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
                     id="identification-number"
                     value={identificationNumber}
                     onChange={(e) => setIdentificationNumber(e.target.value)}
@@ -374,7 +413,9 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="document-issue-date">Fecha de Expedición</Label>
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="document-issue-date">
+                    Fecha de Expedición
+                  </Label>
                   <DatePicker
                     id="document-issue-date"
                     value={documentIssueDate}
@@ -385,8 +426,11 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="document-issue-place">Lugar de Expedición</Label>
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="document-issue-place">
+                    Lugar de Expedición
+                  </Label>
                   <Input
+                    className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
                     id="document-issue-place"
                     value={documentIssuePlace}
                     onChange={(e) => setDocumentIssuePlace(e.target.value)}
@@ -401,23 +445,43 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="space-y-2">
-                  <Label htmlFor="gender">Sexo</Label>
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="gender">
+                    Sexo
+                  </Label>
                   <RadioGroup value={gender} onValueChange={setGender} className="flex space-x-4">
                     <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="F" id="gender-f" />
+                      <RadioGroupItem
+                        className="h-5 w-5 border-2 border-gray-400 text-blue-600"
+                        value="F"
+                        id="gender-f"
+                      />
                       <Label htmlFor="gender-f">Femenino</Label>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="M" id="gender-m" />
+                      <RadioGroupItem
+                        className="h-5 w-5 border-2 border-gray-400 text-blue-600"
+                        value="M"
+                        id="gender-m"
+                      />
                       <Label htmlFor="gender-m">Masculino</Label>
                     </div>
                   </RadioGroup>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="marital-status">Estado Civil</Label>
-                  <Select value={maritalStatus} onValueChange={setMaritalStatus} required>
-                    <SelectTrigger id="marital-status">
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="marital-status">
+                    Estado Civil
+                  </Label>
+                  <Select
+                    className="border-2 rounded-md shadow-sm"
+                    value={maritalStatus}
+                    onValueChange={setMaritalStatus}
+                    required
+                  >
+                    <SelectTrigger
+                      className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
+                      id="marital-status"
+                    >
                       <SelectValue placeholder="Seleccione estado civil" />
                     </SelectTrigger>
                     <SelectContent>
@@ -441,14 +505,24 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="nationality">Nacionalidad</Label>
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="nationality">
+                    Nacionalidad
+                  </Label>
                   <RadioGroup value={nationality} onValueChange={setNationality} className="flex space-x-4">
                     <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="Colombiana" id="nationality-col" />
+                      <RadioGroupItem
+                        className="h-5 w-5 border-2 border-gray-400 text-blue-600"
+                        value="Colombiana"
+                        id="nationality-col"
+                      />
                       <Label htmlFor="nationality-col">Colombiana</Label>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="Extranjera" id="nationality-ext" />
+                      <RadioGroupItem
+                        className="h-5 w-5 border-2 border-gray-400 text-blue-600"
+                        value="Extranjera"
+                        id="nationality-ext"
+                      />
                       <Label htmlFor="nationality-ext">Extranjera</Label>
                     </div>
                   </RadioGroup>
@@ -456,8 +530,15 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="country">País</Label>
-                <Input id="country" value={country} onChange={(e) => setCountry(e.target.value)} />
+                <Label className="text-base font-semibold text-gray-700" htmlFor="country">
+                  País
+                </Label>
+                <Input
+                  className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
+                  id="country"
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                />
               </div>
 
               <div className="flex justify-end">
@@ -475,9 +556,18 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="space-y-2">
-                  <Label htmlFor="military-booklet-type">Tipo</Label>
-                  <Select value={militaryBookletType} onValueChange={setMilitaryBookletType}>
-                    <SelectTrigger id="military-booklet-type">
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="military-booklet-type">
+                    Tipo
+                  </Label>
+                  <Select
+                    className="border-2 rounded-md shadow-sm"
+                    value={militaryBookletType}
+                    onValueChange={setMilitaryBookletType}
+                  >
+                    <SelectTrigger
+                      className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
+                      id="military-booklet-type"
+                    >
                       <SelectValue placeholder="Seleccione un tipo" />
                     </SelectTrigger>
                     <SelectContent>
@@ -491,8 +581,11 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 {militaryBookletType !== "No Aplica" && (
                   <>
                     <div className="space-y-2">
-                      <Label htmlFor="military-booklet-number">Número</Label>
+                      <Label className="text-base font-semibold text-gray-700" htmlFor="military-booklet-number">
+                        Número
+                      </Label>
                       <Input
+                        className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
                         id="military-booklet-number"
                         value={militaryBookletNumber}
                         onChange={(e) => setMilitaryBookletNumber(e.target.value)}
@@ -500,8 +593,11 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="military-district">Distrito Militar (D.M)</Label>
+                      <Label className="text-base font-semibold text-gray-700" htmlFor="military-district">
+                        Distrito Militar (D.M)
+                      </Label>
                       <Input
+                        className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
                         id="military-district"
                         value={militaryDistrict}
                         onChange={(e) => setMilitaryDistrict(e.target.value)}
@@ -543,8 +639,11 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="space-y-2">
-                  <Label htmlFor="birth-country">País de Nacimiento</Label>
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="birth-country">
+                    País de Nacimiento
+                  </Label>
                   <Input
+                    className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
                     id="birth-country"
                     value={birthCountry}
                     onChange={(e) => setBirthCountry(e.target.value)}
@@ -553,19 +652,38 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="birth-state">Departamento de Nacimiento</Label>
-                  <Input id="birth-state" value={birthState} onChange={(e) => setBirthState(e.target.value)} required />
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="birth-state">
+                    Departamento de Nacimiento
+                  </Label>
+                  <Input
+                    className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
+                    id="birth-state"
+                    value={birthState}
+                    onChange={(e) => setBirthState(e.target.value)}
+                    required
+                  />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="birth-city">Municipio de Nacimiento</Label>
-                  <Input id="birth-city" value={birthCity} onChange={(e) => setBirthCity(e.target.value)} required />
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="birth-city">
+                    Municipio de Nacimiento
+                  </Label>
+                  <Input
+                    className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
+                    id="birth-city"
+                    value={birthCity}
+                    onChange={(e) => setBirthCity(e.target.value)}
+                    required
+                  />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="birth-municipality">Código DANE Municipio de Nacimiento</Label>
+                <Label className="text-base font-semibold text-gray-700" htmlFor="birth-municipality">
+                  Código DANE Municipio de Nacimiento
+                </Label>
                 <Input
+                  className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
                   id="birth-municipality"
                   value={birthMunicipality}
                   onChange={(e) => setBirthMunicipality(e.target.value)}
@@ -576,13 +694,24 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
               <Separator className="my-4" />
 
               <div className="space-y-2">
-                <Label htmlFor="address">Dirección Personal</Label>
-                <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} required />
+                <Label className="text-base font-semibold text-gray-700" htmlFor="address">
+                  Dirección Personal
+                </Label>
+                <Input
+                  className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
+                  id="address"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  required
+                />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="institutional-address">Dirección Institucional</Label>
+                <Label className="text-base font-semibold text-gray-700" htmlFor="institutional-address">
+                  Dirección Institucional
+                </Label>
                 <Input
+                  className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
                   id="institutional-address"
                   value={institutionalAddress}
                   onChange={(e) => setInstitutionalAddress(e.target.value)}
@@ -591,19 +720,40 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Teléfono</Label>
-                  <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="phone">
+                    Teléfono
+                  </Label>
+                  <Input
+                    className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
+                    id="phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    required
+                  />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="email">Correo Electrónico Personal</Label>
-                  <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="email">
+                    Correo Electrónico Personal
+                  </Label>
+                  <Input
+                    className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="institutional-email">Correo Electrónico Institucional</Label>
+                <Label className="text-base font-semibold text-gray-700" htmlFor="institutional-email">
+                  Correo Electrónico Institucional
+                </Label>
                 <Input
+                  className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
                   id="institutional-email"
                   type="email"
                   value={institutionalEmail}
@@ -613,8 +763,11 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="space-y-2">
-                  <Label htmlFor="residence-country">País de Residencia</Label>
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="residence-country">
+                    País de Residencia
+                  </Label>
                   <Input
+                    className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
                     id="residence-country"
                     value={residenceCountry}
                     onChange={(e) => setResidenceCountry(e.target.value)}
@@ -623,8 +776,11 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="residence-state">Departamento de Residencia</Label>
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="residence-state">
+                    Departamento de Residencia
+                  </Label>
                   <Input
+                    className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
                     id="residence-state"
                     value={residenceState}
                     onChange={(e) => setResidenceState(e.target.value)}
@@ -633,8 +789,11 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="residence-city">Municipio de Residencia</Label>
+                  <Label className="text-base font-semibold text-gray-700" htmlFor="residence-city">
+                    Municipio de Residencia
+                  </Label>
                   <Input
+                    className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
                     id="residence-city"
                     value={residenceCity}
                     onChange={(e) => setResidenceCity(e.target.value)}
@@ -644,8 +803,11 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="residence-municipality">Código DANE Municipio de Residencia</Label>
+                <Label className="text-base font-semibold text-gray-700" htmlFor="residence-municipality">
+                  Código DANE Municipio de Residencia
+                </Label>
                 <Input
+                  className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm"
                   id="residence-municipality"
                   value={residenceMunicipality}
                   onChange={(e) => setResidenceMunicipality(e.target.value)}

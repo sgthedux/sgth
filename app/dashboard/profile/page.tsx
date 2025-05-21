@@ -1,13 +1,9 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
-import { Suspense } from "react"
 import { PersonalInfoForm } from "@/components/profile/personal-info-form"
 import { EducationForm } from "@/components/profile/education-form"
 import { ExperienceForm } from "@/components/profile/experience-form"
 import { LanguageForm } from "@/components/profile/language-form"
-import { ProfileNavigation } from "@/components/profile/profile-navigation"
-
-export const dynamic = "force-dynamic"
 
 export default async function ProfilePage({ searchParams }: { searchParams: { tab?: string } }) {
   const supabase = await createClient()
@@ -61,16 +57,11 @@ export default async function ProfilePage({ searchParams }: { searchParams: { ta
   console.log("Personal Info Data:", personalInfo)
 
   return (
-    <>
-      <Suspense fallback={<div>Cargando navegación...</div>}>
-        <ProfileNavigation />
-      </Suspense>
-      <div className="space-y-6">
-        {activeTab === "personal" && <PersonalInfoForm userId={userId} initialData={personalInfo || undefined} />}
-        {activeTab === "education" && <EducationForm userId={userId} educations={education || []} />}
-        {activeTab === "experience" && <ExperienceForm userId={userId} experiences={experience || []} />}
-        {activeTab === "languages" && <LanguageForm userId={userId} languages={languages || []} />}
-      </div>
-    </>
+    <div className="space-y-6">
+      {activeTab === "personal" && <PersonalInfoForm userId={userId} initialData={personalInfo || undefined} />}
+      {activeTab === "education" && <EducationForm userId={userId} educations={education || []} />}
+      {activeTab === "experience" && <ExperienceForm userId={userId} experiences={experience || []} />}
+      {activeTab === "languages" && <LanguageForm userId={userId} languages={languages || []} />}
+    </div>
   )
 }
