@@ -4,12 +4,13 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { FileText, Pencil, AlertCircle, Loader2, Save } from "lucide-react"
+import { FileText, Pencil, AlertCircle, Loader2, Save, Search } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { createClient } from "@/lib/supabase/client"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DeleteUserConfirmation } from "@/components/delete-user-confirmation"
 import Link from "next/link"
+import { Input } from "@/components/ui/input"
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState([])
@@ -20,6 +21,9 @@ export default function AdminUsersPage() {
   const [userStatus, setUserStatus] = useState({})
   const [savingStatus, setSavingStatus] = useState({})
   const [statusChanged, setStatusChanged] = useState({})
+  const [searchTerm, setSearchTerm] = useState("")
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchResults, setSearchResults] = useState([])
 
   const [currentPage, setCurrentPage] = useState(1)
   const [totalUsers, setTotalUsers] = useState(0)
@@ -138,6 +142,62 @@ export default function AdminUsersPage() {
   const loadMoreUsers = () => {
     if (!isLoadingMore && hasMoreUsers) {
       loadUsers(currentPage + 1)
+    }
+  }
+
+  // Función para buscar usuarios en la base de datos
+  const searchUsers = async (term) => {
+    if (!term.trim()) {
+      setIsSearching(false)
+      setSearchResults([])
+      return
+    }
+
+    setIsSearching(true)
+    try {
+      const supabase = createClient()
+
+      // Buscar por nombre o email
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .or(`full_name.ilike.%${term}%,email.ilike.%${term}%`)
+        .order("created_at", { ascending: false })
+
+      if (error) {
+        throw new Error(`Error al buscar usuarios: ${error.message}`)
+      }
+
+      setSearchResults(data || [])
+
+      // Obtener documentos CV firmados para cada usuario encontrado
+      const cvDocs = {}
+      for (const user of data || []) {
+        const { data: docData } = await supabase
+          .from("documents")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("type", "cv_signed")
+          .order("created_at", { ascending: false })
+          .limit(1)
+
+        if (docData && docData.length > 0) {
+          cvDocs[user.id] = docData[0]
+        }
+      }
+      setCvDocuments((prev) => ({ ...prev, ...cvDocs }))
+
+      // Inicializar el estado de cada usuario
+      const initialStatus = {}
+      data.forEach((user) => {
+        initialStatus[user.id] = user.status || "Pendiente"
+      })
+      setUserStatus((prev) => ({ ...prev, ...initialStatus }))
+    } catch (err) {
+      console.error("Error al buscar usuarios:", err)
+      alert(`Error al buscar: ${err.message}`)
+    } finally {
+      setIsSearching(false)
     }
   }
 
@@ -277,9 +337,30 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Gestión de usuarios</h1>
-        <p className="text-muted-foreground">Administra los usuarios del sistema</p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Gestión de usuarios</h1>
+          <p className="text-muted-foreground">Administra los usuarios del sistema</p>
+        </div>
+        <div className="relative w-64">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nombre..."
+            className="pl-8"
+            value={searchTerm}
+            onChange={(e) => {
+              const value = e.target.value
+              setSearchTerm(value)
+
+              // Debounce para evitar muchas consultas
+              clearTimeout(window.searchTimeout)
+              window.searchTimeout = setTimeout(() => {
+                searchUsers(value)
+              }, 500)
+            }}
+          />
+          {isSearching && <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />}
+        </div>
       </div>
 
       <Card>
@@ -299,9 +380,11 @@ export default function AdminUsersPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((user, index) => (
+                  {(searchTerm ? searchResults : users).map((user, index) => (
                     <TableRow key={user.id}>
-                      <TableCell className="font-medium">{(currentPage - 1) * usersPerPage + index + 1}</TableCell>
+                      <TableCell className="font-medium">
+                        {searchTerm ? index + 1 : (currentPage - 1) * usersPerPage + index + 1}
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <Avatar>
@@ -356,7 +439,11 @@ export default function AdminUsersPage() {
                             userName={user.full_name || user.email || "Usuario"}
                             onSuccess={() => {
                               // Actualizar la lista de usuarios después de eliminar
-                              setUsers((prev) => prev.filter((u) => u.id !== user.id))
+                              if (searchTerm) {
+                                setSearchResults((prev) => prev.filter((u) => u.id !== user.id))
+                              } else {
+                                setUsers((prev) => prev.filter((u) => u.id !== user.id))
+                              }
                               alert("Usuario eliminado correctamente")
                             }}
                           />
@@ -369,7 +456,18 @@ export default function AdminUsersPage() {
 
               {/* Controles de paginación */}
               <div className="flex justify-center mt-6">
-                {isLoadingMore ? (
+                {searchTerm ? (
+                  <p className="text-sm text-muted-foreground">
+                    {isSearching ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Buscando usuarios...
+                      </span>
+                    ) : (
+                      `Se encontraron ${searchResults.length} usuarios que coinciden con "${searchTerm}"`
+                    )}
+                  </p>
+                ) : isLoadingMore ? (
                   <div className="flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     <span className="text-sm text-muted-foreground">Cargando más usuarios...</span>
@@ -387,7 +485,13 @@ export default function AdminUsersPage() {
             </>
           ) : (
             <div className="text-center py-6">
-              <p className="text-muted-foreground">No hay usuarios registrados</p>
+              <p className="text-muted-foreground">
+                {searchTerm
+                  ? isSearching
+                    ? "Buscando usuarios..."
+                    : "No se encontraron usuarios con ese nombre"
+                  : "No hay usuarios registrados"}
+              </p>
             </div>
           )}
         </CardContent>
