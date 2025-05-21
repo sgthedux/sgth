@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import type React from "react"
 import { useMemo, Suspense, useState, useEffect } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
@@ -15,26 +17,22 @@ import { SWRProvider } from "@/lib/swr-config"
 import { createClient } from "@/lib/supabase/client"
 import { useAllProfileData } from "@/hooks/use-profile"
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
 
   return (
     <SWRProvider>
-      <Suspense fallback={<div>Loading params...</div>}>
-        <InnerLayout pathname={pathname} router={router}>
+      <Suspense fallback={<LoadingState message="Loading params..." />}>
+        <LayoutInner pathname={pathname} router={router}>
           {children}
-        </InnerLayout>
+        </LayoutInner>
       </Suspense>
     </SWRProvider>
   )
 }
 
-function InnerLayout({
+function LayoutInner({
   pathname,
   router,
   children,
@@ -230,7 +228,7 @@ function ProfileContent({
 
   return (
     <div className="w-full max-w-full overflow-hidden">
-      {activeSection === "profile" && <ProfileNavigation />}
+      {activeSection === "profile" && <ProfileNavigation activeTab={activeTab} userId={userId} />}
 
       {/* Renderizado condicional del contenido */}
       {activeSection === "dashboard" && <div className="w-full max-w-full overflow-hidden">{children}</div>}

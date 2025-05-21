@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { ProfileForm } from "@/components/profile-form"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { ArrowLeft } from "lucide-react"
 
 export default async function ProfilePage() {
   const supabase = await createClient()
@@ -21,7 +24,15 @@ export default async function ProfilePage() {
 
   return (
     <div className="container mx-auto py-10">
-      <h1 className="text-3xl font-bold mb-8">Mi Perfil</h1>
+      <div className="flex items-center mb-6">
+        <Link href="/dashboard" passHref>
+          <Button variant="ghost" className="mr-4" size="sm">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Regresar
+          </Button>
+        </Link>
+        <h1 className="text-3xl font-bold">Mi Perfil</h1>
+      </div>
       <ProfileForm
         userId={session.user.id}
         email={session.user.email || ""}
