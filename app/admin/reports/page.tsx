@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button"
 import { FileSpreadsheet, FileText, Download, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
+import ExcelJS from "exceljs"
 
 // Interfaces para tipado
 interface DocumentType {
@@ -559,23 +558,64 @@ export default function ReportsPage() {
         throw new Error("No hay datos para generar el reporte")
       }
 
-      const headers = [...Object.keys(PARTICIPANTES_SNIES_MAPPING), "AÑO", "SEMESTRE"].join(",")
-      const rows = reportData.map((row) => {
-        const allColumns = [...Object.keys(PARTICIPANTES_SNIES_MAPPING), "AÑO", "SEMESTRE"]
-        return allColumns
-          .map((key) => {
-            const value = row[key]
-            return typeof value === "string" ? `"${value.replace(/"/g, '""')}"` : value || ""
-          })
-          .join(",")
-      })
-      const csv = [headers, ...rows].join("\n")
+      // Crear un nuevo libro de Excel
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet("Participantes SNIES")
 
-      console.log(`CSV generado con ${rows.length} filas y ${headers.split(",").length} columnas`)
+      // Definir las columnas
+      const columns = [...Object.keys(PARTICIPANTES_SNIES_MAPPING), "AÑO", "SEMESTRE"]
+
+      // Añadir encabezados
+      worksheet.addRow(columns)
+
+      // Dar formato a los encabezados
+      const headerRow = worksheet.getRow(1)
+      headerRow.font = { bold: true }
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFE0E0E0" },
+        }
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        }
+      })
+
+      // Añadir datos
+      reportData.forEach((rowData) => {
+        const values = columns.map((column) => rowData[column] || "")
+        worksheet.addRow(values)
+      })
+
+      // Ajustar ancho de columnas automáticamente
+      worksheet.columns.forEach((column) => {
+        column.width = 15
+      })
+
+      // Generar el archivo Excel
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
 
       const periodYear = reportPeriod?.year || currentYear
       const periodSemester = reportPeriod?.semester || currentSemester
-      downloadCSV(csv, `Participante_SNIES_${periodYear}_${periodSemester}.csv`)
+
+      // Descargar el archivo
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `Participante_SNIES_${periodYear}_${periodSemester}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      // Liberar recursos
+      setTimeout(() => {
+        URL.revokeObjectURL(url)
+      }, 100)
     } catch (err: any) {
       console.error("Error al generar reporte de participantes:", err)
       setError(`Error al generar reporte de participantes: ${err.message}`)
@@ -677,44 +717,70 @@ export default function ReportsPage() {
         throw new Error("No hay datos para generar el reporte")
       }
 
-      const headers = Object.keys(DOCENTES_SNIES_MAPPING).join(",")
-      const rows = reportData.map((row) =>
-        Object.keys(DOCENTES_SNIES_MAPPING)
-          .map((key) => {
-            const value = row[key]
-            return typeof value === "string" ? `"${value.replace(/"/g, '""')}"` : value || ""
-          })
-          .join(","),
-      )
-      const csv = [headers, ...rows].join("\n")
+      // Crear un nuevo libro de Excel
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet("Docentes SNIES")
 
-      console.log(`CSV generado con ${rows.length} filas y ${headers.split(",").length} columnas`)
+      // Definir las columnas
+      const columns = Object.keys(DOCENTES_SNIES_MAPPING)
+
+      // Añadir encabezados
+      worksheet.addRow(columns)
+
+      // Dar formato a los encabezados
+      const headerRow = worksheet.getRow(1)
+      headerRow.font = { bold: true }
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFE0E0E0" },
+        }
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        }
+      })
+
+      // Añadir datos
+      reportData.forEach((rowData) => {
+        const values = columns.map((column) => rowData[column] || "")
+        worksheet.addRow(values)
+      })
+
+      // Ajustar ancho de columnas automáticamente
+      worksheet.columns.forEach((column) => {
+        column.width = 15
+      })
+
+      // Generar el archivo Excel
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
 
       const periodYear = reportPeriodOuter?.year || currentYear
       const periodSemester = reportPeriodOuter?.semester || currentSemester
-      downloadCSV(csv, `Docentes_IES_SNIES_${periodYear}_${periodSemester}.csv`)
+
+      // Descargar el archivo
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `Docentes_IES_SNIES_${periodYear}_${periodSemester}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      // Liberar recursos
+      setTimeout(() => {
+        URL.revokeObjectURL(url)
+      }, 100)
     } catch (err: any) {
       console.error("Error al generar reporte de docentes:", err)
       setError(`Error al generar reporte de docentes: ${err.message}`)
     } finally {
       setGeneratingReport(null)
     }
-  }
-
-  const downloadCSV = (csvContent: string, fileName: string) => {
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.setAttribute("href", url)
-    link.setAttribute("download", fileName)
-    link.style.visibility = "hidden"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    // Liberar recursos
-    setTimeout(() => {
-      URL.revokeObjectURL(url)
-    }, 100)
   }
 
   if (loading) {
@@ -750,7 +816,7 @@ export default function ReportsPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Reportes</h1>
         <p className="text-muted-foreground">Genera reportes del sistema</p>
-      </div>    
+      </div>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
@@ -769,11 +835,11 @@ export default function ReportsPage() {
             >
               {generatingReport === "participantes" ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generando...
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generando Excel...
                 </>
               ) : (
                 <>
-                  <Download className="mr-2 h-4 w-4" /> Exportar Participantes SNIES
+                  <Download className="mr-2 h-4 w-4" /> Exportar Participantes a Excel
                 </>
               )}
             </Button>
@@ -790,11 +856,11 @@ export default function ReportsPage() {
             <Button className="w-full" onClick={generateDocentesSNIES} disabled={generatingReport === "docentes"}>
               {generatingReport === "docentes" ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generando...
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generando Excel...
                 </>
               ) : (
                 <>
-                  <Download className="mr-2 h-4 w-4" /> Exportar Docentes SNIES
+                  <Download className="mr-2 h-4 w-4" /> Exportar Docentes a Excel
                 </>
               )}
             </Button>
