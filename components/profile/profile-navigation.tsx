@@ -213,9 +213,9 @@ export function ProfileNavigation() {
           </TooltipProvider>
         </div>
 
-        <div className="px-4 py-2 bg-amber-50 border-t text-xs sm:text-sm flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-          <span className="line-clamp-2">
+        <div className="px-4 py-2 bg-amber-50 dark:bg-amber-900/60 border-t border-amber-100 dark:border-amber-800 text-xs sm:text-sm flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-amber-500 dark:text-amber-300 flex-shrink-0" />
+          <span className="line-clamp-2 text-amber-800 dark:text-amber-100 font-medium">
             {completionPercentage < 100
               ? "Complete todas las secciones para generar su hoja de vida completa."
               : "¡Perfil completo! Ya puede generar su hoja de vida."}
