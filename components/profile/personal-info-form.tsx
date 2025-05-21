@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -17,6 +17,16 @@ import { DocumentUpload } from "@/components/profile/document-upload"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Separator } from "@/components/ui/separator"
 import { DatePicker } from "@/components/date-picker"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface Props {
   userId: string
@@ -59,6 +69,12 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
   const [activeTab, setActiveTab] = useState("identification")
   const [documentTypes, setDocumentTypes] = useState<any[]>([])
   const [maritalStatusOptions, setMaritalStatusOptions] = useState<any[]>([])
+  const [showUnsavedChangesDialog, setShowUnsavedChangesDialog] = useState(false)
+  const [pendingTabChange, setPendingTabChange] = useState<string | null>(null)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastSavedDataRef = useRef<any>(null)
 
   // Identification data
   const [firstSurname, setFirstSurname] = useState<string>("")
@@ -97,6 +113,185 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
 
   const router = useRouter()
   const supabase = createClient()
+
+  // Función para obtener los datos actuales del formulario
+  const getCurrentFormData = useCallback(() => {
+    return {
+      user_id: userId,
+      first_surname: firstSurname,
+      second_surname: secondSurname,
+      first_name: firstName,
+      middle_name: middleName,
+      identification_type: identificationType,
+      identification_number: identificationNumber,
+      document_issue_date: documentIssueDate,
+      document_issue_place: documentIssuePlace,
+      gender,
+      marital_status: maritalStatus,
+      nationality,
+      country,
+      military_booklet_type: militaryBookletType,
+      military_booklet_number: militaryBookletNumber,
+      military_district: militaryDistrict,
+      birth_date: birthDate,
+      birth_country: birthCountry,
+      birth_state: birthState,
+      birth_city: birthCity,
+      birth_municipality: birthMunicipality,
+      address,
+      institutional_address: institutionalAddress,
+      phone,
+      email,
+      institutional_email: institutionalEmail,
+      residence_country: residenceCountry,
+      residence_state: residenceState,
+      residence_city: residenceCity,
+      residence_municipality: residenceMunicipality,
+    }
+  }, [
+    userId,
+    firstSurname,
+    secondSurname,
+    firstName,
+    middleName,
+    identificationType,
+    identificationNumber,
+    documentIssueDate,
+    documentIssuePlace,
+    gender,
+    maritalStatus,
+    nationality,
+    country,
+    militaryBookletType,
+    militaryBookletNumber,
+    militaryDistrict,
+    birthDate,
+    birthCountry,
+    birthState,
+    birthCity,
+    birthMunicipality,
+    address,
+    institutionalAddress,
+    phone,
+    email,
+    institutionalEmail,
+    residenceCountry,
+    residenceState,
+    residenceCity,
+    residenceMunicipality,
+  ])
+
+  // Función para guardar automáticamente
+  const autoSave = useCallback(async () => {
+    if (!userId) return
+
+    const currentData = getCurrentFormData()
+
+    // Verificar si hay cambios comparando con los últimos datos guardados
+    if (lastSavedDataRef.current && JSON.stringify(lastSavedDataRef.current) === JSON.stringify(currentData)) {
+      return // No hay cambios, no es necesario guardar
+    }
+
+    setAutoSaveStatus("saving")
+
+    try {
+      const { data: existingData, error: fetchError } = await supabase
+        .from("personal_info")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle()
+
+      if (fetchError && !fetchError.message.includes("No rows found")) {
+        throw fetchError
+      }
+
+      let error
+
+      if (existingData) {
+        const { error: updateError } = await supabase.from("personal_info").update(currentData).eq("user_id", userId)
+
+        error = updateError
+      } else {
+        const { error: insertError } = await supabase.from("personal_info").insert(currentData)
+
+        error = insertError
+      }
+
+      if (error) throw error
+
+      // Actualizar referencia de datos guardados
+      lastSavedDataRef.current = { ...currentData }
+      setHasUnsavedChanges(false)
+      setAutoSaveStatus("saved")
+
+      // Resetear el estado después de 3 segundos
+      setTimeout(() => {
+        setAutoSaveStatus("idle")
+      }, 3000)
+    } catch (error: any) {
+      console.error("Error en autoguardado:", error)
+      setAutoSaveStatus("error")
+    }
+  }, [getCurrentFormData, supabase, userId])
+
+  // Configurar el guardado automático cuando cambian los datos
+  useEffect(() => {
+    // Marcar que hay cambios sin guardar
+    if (lastSavedDataRef.current) {
+      setHasUnsavedChanges(true)
+    }
+
+    // Limpiar el timeout anterior si existe
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current)
+    }
+
+    // Configurar un nuevo timeout para guardar después de 2 segundos de inactividad
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      if (hasUnsavedChanges) {
+        autoSave()
+      }
+    }, 2000)
+
+    // Limpiar el timeout cuando el componente se desmonte
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current)
+      }
+    }
+  }, [
+    firstSurname,
+    secondSurname,
+    firstName,
+    middleName,
+    identificationType,
+    identificationNumber,
+    documentIssueDate,
+    documentIssuePlace,
+    gender,
+    maritalStatus,
+    nationality,
+    country,
+    militaryBookletType,
+    militaryBookletNumber,
+    militaryDistrict,
+    birthDate,
+    birthCountry,
+    birthState,
+    birthCity,
+    birthMunicipality,
+    address,
+    institutionalAddress,
+    phone,
+    email,
+    institutionalEmail,
+    residenceCountry,
+    residenceState,
+    residenceCity,
+    residenceMunicipality,
+    autoSave,
+    hasUnsavedChanges,
+  ])
 
   // Cargar catálogos
   useEffect(() => {
@@ -187,8 +382,64 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
       setResidenceState(initialData.residence_state || "")
       setResidenceCity(initialData.residence_city || "")
       setResidenceMunicipality(initialData.residence_municipality || "")
+
+      // Guardar los datos iniciales como referencia
+      lastSavedDataRef.current = {
+        user_id: userId,
+        first_surname: initialData.first_surname || "",
+        second_surname: initialData.second_surname || "",
+        first_name: initialData.first_name || "",
+        middle_name: initialData.middle_name || "",
+        identification_type: initialData.identification_type || "",
+        identification_number: initialData.identification_number || "",
+        document_issue_date: initialData.document_issue_date || "",
+        document_issue_place: initialData.document_issue_place || "",
+        gender: initialData.gender || "",
+        marital_status: initialData.marital_status || "",
+        nationality: initialData.nationality || "",
+        country: initialData.country || "",
+        military_booklet_type: initialData.military_booklet_type || "",
+        military_booklet_number: initialData.military_booklet_number || "",
+        military_district: initialData.military_district || "",
+        birth_date: initialData.birth_date || "",
+        birth_country: initialData.birth_country || "",
+        birth_state: initialData.birth_state || "",
+        birth_city: initialData.birth_city || "",
+        birth_municipality: initialData.birth_municipality || "",
+        address: initialData.address || "",
+        institutional_address: initialData.institutional_address || "",
+        phone: initialData.phone || "",
+        email: initialData.email || "",
+        institutional_email: initialData.institutional_email || "",
+        residence_country: initialData.residence_country || "",
+        residence_state: initialData.residence_state || "",
+        residence_city: initialData.residence_city || "",
+        residence_municipality: initialData.residence_municipality || "",
+      }
     }
-  }, [initialData])
+  }, [initialData, userId])
+
+  // Función modificada para cambiar de pestaña con verificación de cambios sin guardar
+  const changeTab = (newTab: string) => {
+    if (hasUnsavedChanges && autoSaveStatus !== "saving") {
+      // Si hay cambios sin guardar, mostrar diálogo de confirmación
+      setPendingTabChange(newTab)
+      setShowUnsavedChangesDialog(true)
+    } else {
+      // Si no hay cambios o se está guardando automáticamente, cambiar directamente
+      setActiveTab(newTab)
+    }
+  }
+
+  const nextTab = () => {
+    if (activeTab === "identification") changeTab("military")
+    else if (activeTab === "military") changeTab("contact")
+  }
+
+  const prevTab = () => {
+    if (activeTab === "contact") changeTab("military")
+    else if (activeTab === "military") changeTab("identification")
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -263,6 +514,10 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
 
       if (profileError) throw profileError
 
+      // Actualizar referencia de datos guardados
+      lastSavedDataRef.current = getCurrentFormData()
+      setHasUnsavedChanges(false)
+
       router.refresh()
     } catch (error: any) {
       setError(error.message || "Error al guardar la información personal")
@@ -271,21 +526,35 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
     }
   }
 
-  const nextTab = () => {
-    if (activeTab === "identification") setActiveTab("military")
-    else if (activeTab === "military") setActiveTab("contact")
-  }
-
-  const prevTab = () => {
-    if (activeTab === "contact") setActiveTab("military")
-    else if (activeTab === "military") setActiveTab("identification")
+  // Renderizar indicador de estado de guardado automático
+  const renderAutoSaveStatus = () => {
+    switch (autoSaveStatus) {
+      case "saving":
+        return (
+          <div className="text-xs text-blue-600 flex items-center">
+            <div className="animate-spin mr-1 h-3 w-3 border-2 border-blue-600 rounded-full border-t-transparent"></div>
+            Guardando...
+          </div>
+        )
+      case "saved":
+        return <div className="text-xs text-green-600">Guardado automático completado</div>
+      case "error":
+        return <div className="text-xs text-red-600">Error al guardar automáticamente</div>
+      default:
+        return hasUnsavedChanges ? <div className="text-xs text-amber-600">Cambios sin guardar</div> : null
+    }
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Datos Personales</CardTitle>
-        <CardDescription>Ingrese su información personal completa</CardDescription>
+        <div className="flex justify-between items-center">
+          <div>
+            <CardTitle>Datos Personales</CardTitle>
+            <CardDescription>Ingrese su información personal completa</CardDescription>
+          </div>
+          {renderAutoSaveStatus()}
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {error && (
@@ -295,7 +564,7 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
           </Alert>
         )}
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={changeTab} className="w-full">
           <TabsList className="grid grid-cols-3 mb-4">
             <TabsTrigger value="identification">Identificación</TabsTrigger>
             <TabsTrigger value="military">Libreta Militar</TabsTrigger>
@@ -827,6 +1096,47 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
           </TabsContent>
         </Tabs>
       </CardContent>
+
+      {/* Diálogo de confirmación para cambios sin guardar */}
+      <AlertDialog open={showUnsavedChangesDialog} onOpenChange={setShowUnsavedChangesDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cambios sin guardar</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tienes cambios sin guardar. ¿Quieres guardarlos antes de cambiar de sección?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowUnsavedChangesDialog(false)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                autoSave().then(() => {
+                  if (pendingTabChange) {
+                    setActiveTab(pendingTabChange)
+                    setPendingTabChange(null)
+                  }
+                  setShowUnsavedChangesDialog(false)
+                })
+              }}
+            >
+              Guardar y continuar
+            </AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => {
+                setHasUnsavedChanges(false)
+                if (pendingTabChange) {
+                  setActiveTab(pendingTabChange)
+                  setPendingTabChange(null)
+                }
+                setShowUnsavedChangesDialog(false)
+              }}
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              Continuar sin guardar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   )
 }
