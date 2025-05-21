@@ -735,14 +735,20 @@ export function DocumentUpload({
           </div>
           <div className="flex justify-between mt-2 gap-2">
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
               onClick={() => downloadDocument(publicUrl || uploadedUrl, documentName || "documento")}
             >
               <Download className="h-4 w-4 mr-2" /> Descargar
             </Button>
             {publicUrl && (
-              <Button variant="outline" size="sm" onClick={() => window.open(publicUrl, "_blank")}>
+              <Button
+                variant="default"
+                size="sm"
+                className="bg-green-600 hover:bg-green-700 text-white"
+                onClick={() => window.open(publicUrl, "_blank")}
+              >
                 <FileText className="h-4 w-4 mr-2" /> Ver
               </Button>
             )}
@@ -766,7 +772,7 @@ export function DocumentUpload({
             />
             <Button
               variant="outline"
-              className="w-full justify-start text-left font-normal"
+              className="w-full justify-start text-left font-normal border-blue-200 hover:border-blue-300 hover:bg-blue-50"
               disabled={uploading}
               onClick={() => {
                 const fileInput = window.document.getElementById(fileInputId)
@@ -775,12 +781,17 @@ export function DocumentUpload({
                 }
               }}
             >
-              <Upload className="h-4 w-4 mr-2" />
+              <Upload className="h-4 w-4 mr-2 text-blue-500" />
               {file ? file.name : "Seleccionar archivo"}
             </Button>
           </div>
 
-          <Button onClick={handleUpload} disabled={!file || uploading} size="sm">
+          <Button
+            onClick={handleUpload}
+            disabled={!file || uploading}
+            size="sm"
+            className="bg-green-600 hover:bg-green-700"
+          >
             {uploading ? "Subiendo..." : "Subir"}
           </Button>
         </div>
@@ -821,6 +832,7 @@ export function DocumentUpload({
                 <Button
                   variant="outline"
                   onClick={() => downloadDocument(publicUrl || uploadedUrl || "", documentName || "documento")}
+                  disabled={previewLoading}
                 >
                   <Download className="h-4 w-4 mr-2" /> Descargar
                 </Button>
