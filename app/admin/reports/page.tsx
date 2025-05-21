@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { FileSpreadsheet, FileText, Download, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 
 // Interfaces para tipado
 interface DocumentType {
@@ -508,28 +510,11 @@ export default function ReportsPage() {
         }
       }
 
-      console.log("Perfiles disponibles:", profiles.length)
-
       let approvedProfiles = profiles.filter((profile) => profile.status === "ACEPTADO")
-      console.log("Perfiles aceptados:", approvedProfiles.length)
 
       if (approvedProfiles.length === 0) {
         console.log("No se encontraron perfiles con estado ACEPTADO, usando todos los perfiles")
         approvedProfiles = profiles
-
-        // Si aún no hay perfiles, crear uno de ejemplo
-        if (approvedProfiles.length === 0) {
-          console.log("No se encontraron perfiles, creando uno de ejemplo")
-          approvedProfiles = [
-            {
-              id: "ejemplo",
-              user_id: "ejemplo",
-              email: "ejemplo@ejemplo.com",
-              role: "user",
-              status: "ACEPTADO",
-            },
-          ]
-        }
       }
 
       console.log(`Generando reporte para ${approvedProfiles.length} perfiles`)
@@ -543,18 +528,7 @@ export default function ReportsPage() {
 
         const rowData: Record<string, any> = {}
         const context: ParticipantesContext = {
-          personalInfo:
-            personalInfo ||
-            ({
-              id: profileEntry.id,
-              user_id: profileEntry.id,
-              identification_type: "CC",
-              identification_number: "12345678",
-              first_name: "Usuario",
-              first_surname: "Ejemplo",
-              gender: "M",
-              email: profileEntry.email,
-            } as PersonalInfo),
+          personalInfo: personalInfo || ({} as PersonalInfo),
           documentTypes,
           maritalStatuses,
           profile: profileEntry, // Usar el perfil actual de la iteración
@@ -581,20 +555,8 @@ export default function ReportsPage() {
 
       console.log(`Datos del reporte generados: ${reportData.length} filas`)
 
-      // Incluso si no hay datos, generar un reporte con encabezados
       if (reportData.length === 0) {
-        console.log("No hay datos para el reporte, generando reporte con encabezados")
-
-        // Crear un objeto con todas las columnas vacías
-        const emptyRow: Record<string, string> = {}
-        Object.keys(PARTICIPANTES_SNIES_MAPPING).forEach((key) => {
-          emptyRow[key] = ""
-        })
-        emptyRow["AÑO"] = reportPeriod?.year || currentYear
-        emptyRow["SEMESTRE"] = reportPeriod?.semester || currentSemester
-        emptyRow["MENSAJE"] = "No hay datos disponibles para este reporte"
-
-        reportData.push(emptyRow)
+        throw new Error("No hay datos para generar el reporte")
       }
 
       const headers = [...Object.keys(PARTICIPANTES_SNIES_MAPPING), "AÑO", "SEMESTRE"].join(",")
@@ -640,8 +602,6 @@ export default function ReportsPage() {
         }
       }
 
-      console.log("Experiencias disponibles:", experiences.length)
-
       const docentesIds = new Set(
         experiences
           .filter(
@@ -666,48 +626,14 @@ export default function ReportsPage() {
         if (approvedDocentes.length === 0) {
           console.log("No se encontraron perfiles aceptados, usando todos los perfiles")
           approvedDocentes = profiles
-
-          // Si aún no hay perfiles, crear uno de ejemplo
-          if (approvedDocentes.length === 0) {
-            console.log("No se encontraron perfiles, creando uno de ejemplo")
-            approvedDocentes = [
-              {
-                id: "ejemplo",
-                user_id: "ejemplo",
-                email: "ejemplo@ejemplo.com",
-                role: "user",
-                status: "ACEPTADO",
-              },
-            ]
-          }
         }
       }
 
       console.log(`Generando reporte para ${approvedDocentes.length} docentes`)
 
       const reportData = approvedDocentes.map((profileEntry) => {
-        const personalInfo =
-          personalInfos.find((pi) => pi.user_id === profileEntry.id) ||
-          ({
-            id: profileEntry.id,
-            user_id: profileEntry.id,
-            identification_type: "CC",
-            identification_number: "12345678",
-            first_name: "Docente",
-            first_surname: "Ejemplo",
-            gender: "M",
-            email: profileEntry.email,
-          } as PersonalInfo)
-
-        const education =
-          getMostRelevantEducation(profileEntry.id) ||
-          ({
-            id: "ejemplo",
-            user_id: profileEntry.id,
-            institution: "Universidad Ejemplo",
-            degree: "Título Ejemplo",
-            level: "UNIVERSITARIA",
-          } as Education)
+        const personalInfo = personalInfos.find((pi) => pi.user_id === profileEntry.id) || ({} as PersonalInfo)
+        const education = getMostRelevantEducation(profileEntry.id) || ({} as Education)
 
         if (!personalInfo.id) {
           // Chequear si el objeto está vacío
@@ -747,18 +673,8 @@ export default function ReportsPage() {
 
       console.log(`Datos del reporte generados: ${reportData.length} filas`)
 
-      // Incluso si no hay datos, generar un reporte con encabezados
       if (reportData.length === 0) {
-        console.log("No hay datos para el reporte, generando reporte con encabezados")
-
-        // Crear un objeto con todas las columnas vacías
-        const emptyRow: Record<string, string> = {}
-        Object.keys(DOCENTES_SNIES_MAPPING).forEach((key) => {
-          emptyRow[key] = ""
-        })
-        emptyRow["MENSAJE"] = "No hay datos disponibles para este reporte"
-
-        reportData.push(emptyRow)
+        throw new Error("No hay datos para generar el reporte")
       }
 
       const headers = Object.keys(DOCENTES_SNIES_MAPPING).join(",")
@@ -834,7 +750,7 @@ export default function ReportsPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Reportes</h1>
         <p className="text-muted-foreground">Genera reportes del sistema</p>
-      </div>
+      </div>    
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>

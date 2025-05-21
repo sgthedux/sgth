@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server"
-import { createAdminClient } from "@/lib/supabase/admin"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { FileText, AlertCircle } from "lucide-react"
@@ -19,138 +18,50 @@ export default async function CVPage() {
 
   const userId = session.user.id
 
-  // Usar el cliente admin para obtener datos sin restricciones de RLS
-  const supabaseAdmin = createAdminClient()
-
-  // Get profile
-  const { data: profileData, error: profileError } = await supabaseAdmin
-    .from("profiles")
-    .select("*")
-    .eq("id", userId)
-    .maybeSingle()
-
-  if (profileError) {
-    console.error("Error al obtener perfil:", profileError)
-  }
+  // Get profile - sin usar .single()
+  const { data: profileData } = await supabase.from("profiles").select("*").eq("id", userId)
 
   // Si no hay perfil, intentamos crear uno básico
-  let profile = profileData
-  if (!profile) {
+  let profile = null
+  if (!profileData || profileData.length === 0) {
     // Obtener datos del usuario
     const { data: userData } = await supabase.auth.getUser()
 
     if (userData?.user) {
-      try {
-        // Crear un perfil básico usando el cliente normal primero
-        const { data: newProfile, error: insertError } = await supabase
-          .from("profiles")
-          .insert([
-            {
-              id: userId,
-              full_name: userData.user.user_metadata?.full_name || userData.user.email?.split("@")[0] || "Usuario",
-              email: userData.user.email || "",
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-          ])
-          .select()
-          .maybeSingle()
+      // Crear un perfil básico
+      const { data: newProfile, error: insertError } = await supabase
+        .from("profiles")
+        .insert([
+          {
+            id: userId,
+            full_name: userData.user.user_metadata?.full_name || userData.user.email?.split("@")[0] || "Usuario",
+            email: userData.user.email || "",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ])
+        .select()
 
-        if (insertError) {
-          console.error("Error al crear perfil con cliente normal:", insertError)
-
-          // Si falla, intentar con el cliente admin
-          const { data: adminNewProfile, error: adminInsertError } = await supabaseAdmin
-            .from("profiles")
-            .insert([
-              {
-                id: userId,
-                full_name: userData.user.user_metadata?.full_name || userData.user.email?.split("@")[0] || "Usuario",
-                email: userData.user.email || "",
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              },
-            ])
-            .select()
-            .maybeSingle()
-
-          if (adminInsertError) {
-            console.error("Error al crear perfil con cliente admin:", adminInsertError)
-          } else if (adminNewProfile) {
-            profile = adminNewProfile
-            console.log("Perfil creado exitosamente con cliente admin")
-          }
-        } else if (newProfile) {
-          profile = newProfile
-          console.log("Perfil creado exitosamente con cliente normal")
-        }
-      } catch (error) {
-        console.error("Error inesperado al crear perfil:", error)
+      if (!insertError && newProfile && newProfile.length > 0) {
+        profile = newProfile[0]
       }
     }
+  } else {
+    profile = profileData[0]
   }
 
-  // Si aún no tenemos perfil, usar un perfil mínimo para la vista previa
-  if (!profile && session.user) {
-    profile = {
-      id: userId,
-      full_name: session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Usuario",
-      email: session.user.email || "",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }
-    console.log("Usando perfil mínimo para vista previa")
-  }
-
-  // Get personal info
-  const { data: personalInfo, error: personalInfoError } = await supabaseAdmin
-    .from("personal_info")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle()
-
-  if (personalInfoError) {
-    console.error("Error al obtener información personal:", personalInfoError)
-  }
+  // Get personal info - sin usar .single()
+  const { data: personalInfoData } = await supabase.from("personal_info").select("*").eq("user_id", userId)
+  const personalInfo = personalInfoData && personalInfoData.length > 0 ? personalInfoData[0] : null
 
   // Get education
-  const { data: education, error: educationError } = await supabaseAdmin
-    .from("education")
-    .select("*")
-    .eq("user_id", userId)
-
-  if (educationError) {
-    console.error("Error al obtener educación:", educationError)
-  }
+  const { data: education } = await supabase.from("education").select("*").eq("user_id", userId)
 
   // Get experience
-  const { data: experience, error: experienceError } = await supabaseAdmin
-    .from("experience")
-    .select("*")
-    .eq("user_id", userId)
-
-  if (experienceError) {
-    console.error("Error al obtener experiencia:", experienceError)
-  }
+  const { data: experience } = await supabase.from("experience").select("*").eq("user_id", userId)
 
   // Get languages
-  const { data: languages, error: languagesError } = await supabaseAdmin
-    .from("languages")
-    .select("*")
-    .eq("user_id", userId)
-
-  if (languagesError) {
-    console.error("Error al obtener idiomas:", languagesError)
-  }
-
-  // Log de datos para depuración
-  console.log("Datos cargados para la vista previa:", {
-    profile: profile ? "Encontrado" : "No encontrado",
-    personalInfo: personalInfo ? "Encontrado" : "No encontrado",
-    education: education?.length || 0,
-    experience: experience?.length || 0,
-    languages: languages?.length || 0,
-  })
+  const { data: languages } = await supabase.from("languages").select("*").eq("user_id", userId)
 
   return (
     <div className="space-y-6">
@@ -183,7 +94,7 @@ export default async function CVPage() {
           {profile ? (
             <CvPreview
               profile={profile}
-              personalInfo={personalInfo || null}
+              personalInfo={personalInfo}
               education={education || []}
               experience={experience || []}
               languages={languages || []}

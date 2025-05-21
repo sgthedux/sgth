@@ -13,61 +13,31 @@ export async function POST(request: Request) {
     console.log("Generando PDF para el usuario:", userId)
 
     // Crear cliente de Supabase con el rol de servicio para tener permisos completos
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+      process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+    )
 
-    if (!supabaseServiceKey) {
-      console.error("Error: SUPABASE_SERVICE_ROLE_KEY no está configurada")
-      return NextResponse.json({ error: "Error de configuración del servidor" }, { status: 500 })
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
-
-    // Recopilar toda la información disponible del usuario
-    let userData = {
-      user_id: userId,
-      email: "",
-      full_name: "Usuario",
-    }
-
-    // Intentar obtener el perfil
-    const { data: profileData, error: profileError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .maybeSingle()
+    // Obtener datos del usuario
+    const { data: profileData, error: profileError } = await supabase.from("profiles").select("*").eq("id", userId)
 
     if (profileError) {
       console.error("Error al obtener perfil:", profileError)
-      // Continuamos con la información básica
-    } else if (profileData) {
-      userData = {
-        ...userData,
-        email: profileData.email || userData.email,
-        full_name: profileData.full_name || userData.full_name,
-      }
-      console.log("Perfil encontrado:", profileData)
-    } else {
-      console.log("No se encontró perfil, usando información básica")
+      return NextResponse.json({ error: `Error al obtener perfil: ${profileError.message}` }, { status: 500 })
     }
 
-    // Intentar obtener información personal
+    // Obtener información personal
     const { data: personalInfoData, error: personalInfoError } = await supabase
       .from("personal_info")
       .select("*")
       .eq("user_id", userId)
-      .maybeSingle()
 
+    let personalInfo = null
     if (personalInfoError) {
       console.error("Error al obtener información personal:", personalInfoError)
-    } else if (personalInfoData) {
-      userData = {
-        ...userData,
-        ...personalInfoData,
-      }
-      console.log("Información personal encontrada:", personalInfoData)
-    } else {
-      console.log("No se encontró información personal, usando información básica")
+    } else if (personalInfoData && personalInfoData.length > 0) {
+      personalInfo = personalInfoData[0]
+      console.log("Información personal encontrada")
     }
 
     // Obtener educación
@@ -79,7 +49,7 @@ export async function POST(request: Request) {
     if (educationError) {
       console.error("Error al obtener educación:", educationError)
     } else {
-      console.log(`Se encontraron ${education?.length || 0} registros de educación:`, education)
+      console.log(`Se encontraron ${education?.length || 0} registros de educación`)
     }
 
     // Obtener experiencia
@@ -91,7 +61,7 @@ export async function POST(request: Request) {
     if (experienceError) {
       console.error("Error al obtener experiencia:", experienceError)
     } else {
-      console.log(`Se encontraron ${experience?.length || 0} registros de experiencia:`, experience)
+      console.log(`Se encontraron ${experience?.length || 0} registros de experiencia`)
     }
 
     // Obtener idiomas
@@ -103,25 +73,47 @@ export async function POST(request: Request) {
     if (languagesError) {
       console.error("Error al obtener idiomas:", languagesError)
     } else {
-      console.log(`Se encontraron ${languages?.length || 0} registros de idiomas:`, languages)
+      console.log(`Se encontraron ${languages?.length || 0} registros de idiomas`)
     }
 
-    // Generar el PDF con la información disponible
-    console.log("Datos que se envían a generatePdf:", {
-      userData,
-      education: education || [],
-      experience: experience || [],
-      languages: languages || [],
-    })
+    // Si no tenemos información personal pero tenemos perfil, usamos los datos del perfil
+    if (!personalInfo && profileData && profileData.length > 0) {
+      const profile = profileData[0]
+      personalInfo = {
+        user_id: userId,
+        email: profile.email,
+        full_name: profile.full_name,
+      }
+    }
 
-    const pdfBytes = await generatePdf(userData, education || [], experience || [], languages || [])
+    // Si aún no tenemos información personal, intentamos obtenerla de auth.users
+    if (!personalInfo) {
+      const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId)
+
+      if (userError) {
+        console.error("Error al obtener datos del usuario:", userError)
+      } else if (userData && userData.user) {
+        personalInfo = {
+          user_id: userId,
+          email: userData.user.email,
+          full_name: userData.user.user_metadata?.full_name,
+        }
+      }
+    }
+
+    if (!personalInfo) {
+      return NextResponse.json({ error: "No se encontró información del usuario" }, { status: 404 })
+    }
+
+    // Generar el PDF
+    const pdfBytes = await generatePdf(personalInfo, education || [], experience || [], languages || [])
 
     // Generar un nombre único para el archivo
     const timestamp = new Date().getTime()
     const fileName = `hoja_de_vida_${userId}_${timestamp}.pdf`
 
-    // Si encontramos un perfil, actualizarlo para indicar que se ha generado el CV
-    if (profileData) {
+    // Actualizar el perfil para indicar que se ha generado el CV
+    if (profileData && profileData.length > 0) {
       const { error: updateError } = await supabase
         .from("profiles")
         .update({

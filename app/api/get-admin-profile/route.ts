@@ -14,16 +14,21 @@ export async function GET(request: Request) {
     const supabase = createAdminClient()
 
     // Consulta directa a la base de datos sin pasar por RLS
-    const { data, error } = await supabase.from("profiles").select("role").eq("id", userId).single()
+    const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single()
 
     if (error) {
-      console.error("Error al obtener el rol del usuario:", error)
+      console.error("Error al obtener el perfil del usuario:", error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ role: data?.role || "user" })
+    // Verificar que el usuario sea administrador
+    if (data?.role !== "admin") {
+      return NextResponse.json({ error: "El usuario no tiene permisos de administrador" }, { status: 403 })
+    }
+
+    return NextResponse.json(data)
   } catch (error) {
-    console.error("Error en la API get-user-role:", error)
+    console.error("Error en la API get-admin-profile:", error)
     return NextResponse.json({ error: error instanceof Error ? error.message : "Error desconocido" }, { status: 500 })
   }
 }

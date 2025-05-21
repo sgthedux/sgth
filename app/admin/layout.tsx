@@ -19,12 +19,10 @@ export default function AdminLayout({
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [retryCount, setRetryCount] = useState(0)
   const supabase = createClient()
 
   useEffect(() => {
     let isMounted = true
-    let retryTimeout: NodeJS.Timeout | null = null
 
     async function loadUserProfile() {
       try {
@@ -44,13 +42,7 @@ export default function AdminLayout({
           if (isMounted) {
             setError("Error al verificar la sesión. Por favor, inicie sesión nuevamente.")
             setLoading(false)
-
-            // Redirigir después de un breve retraso para mostrar el error
-            setTimeout(() => {
-              if (isMounted) {
-                router.push("/auth/login?error=session_error")
-              }
-            }, 2000)
+            setTimeout(() => isMounted && router.push("/auth/login?error=session_error"), 2000)
           }
           return
         }
@@ -60,87 +52,43 @@ export default function AdminLayout({
           if (isMounted) {
             setError("No se encontró una sesión activa. Por favor, inicie sesión.")
             setLoading(false)
-
-            // Redirigir después de un breve retraso para mostrar el error
-            setTimeout(() => {
-              if (isMounted) {
-                router.push("/auth/login")
-              }
-            }, 2000)
+            setTimeout(() => isMounted && router.push("/auth/login"), 2000)
           }
           return
         }
 
-        // Verificar explícitamente el rol del usuario
-        const { data, error: profileError } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", session.user.id)
-          .single()
+        // Obtener el rol directamente de los metadatos del usuario
+        const userRole = session.user.user_metadata?.role
 
-        if (profileError) {
-          console.error("Error al obtener el perfil:", profileError)
-
-          // Si hay un error al obtener el perfil, intentar nuevamente después de un retraso
-          if (isMounted && retryCount < 3) {
-            setRetryCount((prev) => prev + 1)
-            retryTimeout = setTimeout(() => {
-              if (isMounted) {
-                loadUserProfile()
-              }
-            }, 2000) // Reintentar después de 2 segundos
-            return
-          }
-
-          if (isMounted) {
-            setError("Error al cargar el perfil de usuario. Por favor, inicie sesión nuevamente.")
-            setLoading(false)
-
-            // Redirigir después de un breve retraso para mostrar el error
-            setTimeout(() => {
-              if (isMounted) {
-                router.push("/auth/login?error=profile_error")
-              }
-            }, 2000)
-          }
-          return
-        }
-
-        if (!data || data.role !== "admin") {
-          console.log("Admin layout - Non-admin user detected, redirecting")
+        // Si no es admin, redirigir al dashboard de usuario
+        if (userRole !== "admin") {
+          console.log("Admin layout - Usuario no es admin, redirigiendo")
           if (isMounted) {
             setError("No tiene permisos de administrador para acceder a esta sección.")
             setLoading(false)
-
-            // Redirigir después de un breve retraso para mostrar el error
-            setTimeout(() => {
-              if (isMounted) {
-                router.push("/dashboard")
-              }
-            }, 2000)
+            setTimeout(() => isMounted && router.push("/dashboard"), 2000)
           }
           return
         }
 
-        // Si todo está bien, establecer el perfil y finalizar la carga
+        // Si es admin, usar los datos básicos del usuario sin consultar la base de datos
         if (isMounted) {
-          setProfile(data)
+          setProfile({
+            id: session.user.id,
+            email: session.user.email,
+            full_name: session.user.user_metadata?.full_name || session.user.email,
+            avatar_url: session.user.user_metadata?.avatar_url,
+            role: "admin",
+          })
           setLoading(false)
           setError(null)
-          setRetryCount(0)
         }
       } catch (error) {
         console.error("Error inesperado al cargar el perfil de administrador:", error)
         if (isMounted) {
           setError("Error inesperado. Por favor, inicie sesión nuevamente.")
           setLoading(false)
-
-          // Redirigir después de un breve retraso para mostrar el error
-          setTimeout(() => {
-            if (isMounted) {
-              router.push("/auth/login?error=unexpected_error")
-            }
-          }, 2000)
+          setTimeout(() => isMounted && router.push("/auth/login?error=unexpected_error"), 2000)
         }
       }
     }
@@ -149,11 +97,8 @@ export default function AdminLayout({
 
     return () => {
       isMounted = false
-      if (retryTimeout) {
-        clearTimeout(retryTimeout)
-      }
     }
-  }, [router, supabase, retryCount])
+  }, [router, supabase])
 
   // Memoizar los enlaces de navegación para evitar re-renderizados
   const navigationLinks = useMemo(

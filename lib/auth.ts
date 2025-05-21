@@ -5,7 +5,7 @@ export async function getUserRole() {
   try {
     const supabase = createClient()
 
-    // Primero intentamos obtener el usuario actual
+    // Obtener el usuario actual
     const {
       data: { user },
       error: userError,
@@ -16,44 +16,47 @@ export async function getUserRole() {
       return null
     }
 
-    // Intentamos obtener el rol desde los metadatos del usuario
+    // Obtener el rol desde los metadatos del usuario
     if (user.user_metadata?.role) {
       return user.user_metadata.role
     }
 
-    // Si no está en los metadatos, lo obtenemos de la tabla profiles
-    const { data, error } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+    // Si no está en los metadatos, obtenerlo de la tabla profiles
+    const { data, error } = await supabase.from("profiles").select("role").eq("id", user.id).single()
 
     if (error) {
       console.error("Error getting user role:", error)
       return "user" // Rol por defecto
     }
 
-    return data?.role || "user"
+    // Actualizar los metadatos del usuario con el rol obtenido
+    await supabase.auth.updateUser({
+      data: { role: data.role },
+    })
+
+    return data.role || "user"
   } catch (error) {
     console.error("Error in getUserRole:", error)
     return "user" // Rol por defecto en caso de error
   }
 }
 
-// Función para actualizar el rol en los metadatos del usuario
-export async function updateUserRoleMetadata(userId: string, role: string) {
+// Función para actualizar el rol de un usuario
+export async function updateUserRole(userId: string, role: string) {
   try {
     const supabase = createClient()
 
-    // Actualizar los metadatos del usuario
-    const { error } = await supabase.auth.updateUser({
-      data: { role },
-    })
+    // Actualizar el rol en la tabla profiles
+    const { error } = await supabase.from("profiles").update({ role }).eq("id", userId)
 
     if (error) {
-      console.error("Error updating user metadata:", error)
+      console.error("Error updating user role:", error)
       return false
     }
 
     return true
   } catch (error) {
-    console.error("Error in updateUserRoleMetadata:", error)
+    console.error("Error in updateUserRole:", error)
     return false
   }
 }

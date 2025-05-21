@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,8 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default async function UserDetailPage({ params }: { params: { id: string } }) {
   try {
-    // Crear cliente de Supabase directamente
-    const supabase = await createClient()
+    // Crear cliente admin de Supabase con service role key
+    const supabase = createAdminClient()
 
     // Verificar sesión
     const {

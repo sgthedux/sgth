@@ -45,28 +45,74 @@ async function getAdminData() {
 
     const userId = sessionData.session.user.id
 
-    // Verificar el rol del usuario con manejo de errores mejorado
-    const { data: profileData, error: profileError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .single()
+    // Verificar el rol directamente desde los metadatos del usuario para evitar recursión
+    const userRole = sessionData.session.user.user_metadata?.role
 
-    if (profileError) {
-      console.error("Error al obtener el perfil:", profileError)
-      return {
-        redirect: true,
-        error: "profile_error",
-        message: profileError.message,
-      }
-    }
+    if (userRole === "admin") {
+      console.log("Usuario es administrador según metadatos")
+    } else {
+      // Solo si no está en los metadatos, intentamos obtenerlo de la tabla profiles
+      // usando una opción que evite la recursión
+      try {
+        const { data: profileData, error: profileError } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", userId)
+          .single()
+          .throwOnError()
 
-    if (profileData?.role !== "admin") {
-      console.log("Usuario no es administrador:", profileData?.role)
-      return {
-        redirect: true,
-        error: "not_admin",
-        message: "El usuario no tiene permisos de administrador",
+        if (profileError) {
+          console.error("Error al obtener el perfil:", profileError)
+          return {
+            redirect: true,
+            error: "profile_error",
+            message: profileError.message,
+          }
+        }
+
+        if (profileData?.role !== "admin") {
+          console.log("Usuario no es administrador:", profileData?.role)
+          return {
+            redirect: true,
+            error: "not_admin",
+            message: "El usuario no tiene permisos de administrador",
+          }
+        }
+      } catch (error) {
+        // Si hay un error (como recursión), verificamos si podemos usar una API alternativa
+        console.error("Error al verificar rol, intentando método alternativo:", error)
+
+        // Método alternativo: usar una API específica para verificar el rol
+        try {
+          const response = await fetch("/api/get-user-role", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ userId }),
+          })
+
+          if (!response.ok) {
+            throw new Error("Error al obtener el rol del usuario")
+          }
+
+          const { role } = await response.json()
+
+          if (role !== "admin") {
+            return {
+              redirect: true,
+              error: "not_admin",
+              message: "El usuario no tiene permisos de administrador",
+            }
+          }
+        } catch (apiError) {
+          console.error("Error en método alternativo:", apiError)
+          return {
+            redirect: true,
+            error: "role_verification_failed",
+            message: "No se pudo verificar el rol del usuario",
+          }
+        }
       }
     }
 
@@ -98,17 +144,6 @@ async function getAdminData() {
       console.error("Error al obtener usuarios recientes:", recentUsersError)
     }
 
-    // Obtener TODOS los usuarios para el dashboard completo
-    const { data: allUsers, error: allUsersError } = await supabase
-      .from("profiles")
-      .select("id, full_name, email, created_at, avatar_url, role, status")
-      .order("created_at", { ascending: false })
-      .limit(100) // Limitamos a 100 para evitar problemas de rendimiento, pero es un límite alto
-
-    if (allUsersError) {
-      console.error("Error al obtener todos los usuarios:", allUsersError)
-    }
-
     // Obtener documentos recientes con manejo de errores mejorado
     const { data: recentDocuments, error: recentDocumentsError } = await supabase
       .from("documents")
@@ -120,25 +155,8 @@ async function getAdminData() {
       console.error("Error al obtener documentos recientes:", recentDocumentsError)
     }
 
-    // Obtener TODOS los documentos para el dashboard completo
-    const { data: allDocuments, error: allDocumentsError } = await supabase
-      .from("documents")
-      .select("id, name, status, created_at, user_id, type, public_url")
-      .order("created_at", { ascending: false })
-      .limit(100) // Limitamos a 100 para evitar problemas de rendimiento, pero es un límite alto
-
-    if (allDocumentsError) {
-      console.error("Error al obtener todos los documentos:", allDocumentsError)
-    }
-
     // Obtener nombres de usuarios para los documentos
-    const userIds = [
-      ...new Set([
-        ...(recentDocuments?.map((doc) => doc.user_id) || []),
-        ...(allDocuments?.map((doc) => doc.user_id) || []),
-      ]),
-    ].filter(Boolean)
-
+    const userIds = recentDocuments?.map((doc) => doc.user_id) || []
     let userMap = {}
 
     if (userIds.length > 0) {
@@ -159,18 +177,15 @@ async function getAdminData() {
 
     return {
       redirect: false,
-      profile: profileData,
       user: sessionData.session.user,
       stats: {
         usersCount: usersCount || 0,
         documentsCount: documentsCount || 0,
-        pendingDocuments: allDocuments?.filter((doc) => doc.status === "pending").length || 0,
-        activeUsers: allUsers?.filter((user) => user.status === "active").length || 0,
+        pendingDocuments: recentDocuments?.filter((doc) => doc.status === "pending").length || 0,
+        activeUsers: usersCount || 0, // Podríamos refinar esto con una consulta más específica
       },
       recentUsers: recentUsers || [],
       recentDocuments: recentDocuments || [],
-      allUsers: allUsers || [],
-      allDocuments: allDocuments || [],
       userMap,
     }
   } catch (error) {
@@ -192,16 +207,14 @@ export default async function AdminDashboardPage() {
     redirect("/auth/login?error=" + adminData.error)
   }
 
-  const { profile, user, stats, recentUsers, recentDocuments, allUsers, allDocuments, userMap } = adminData
+  const { user, stats, recentUsers, recentDocuments, userMap } = adminData
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Dashboard Administrativo</h2>
-          <p className="text-muted-foreground">
-            Bienvenido, {profile?.full_name || user.email}. Aquí tienes un resumen del sistema.
-          </p>
+          <p className="text-muted-foreground">Bienvenido, {user.email}. Aquí tienes un resumen del sistema.</p>
         </div>
         <div className="flex items-center gap-2">
           <Button asChild>
@@ -273,6 +286,8 @@ export default async function AdminDashboardPage() {
                             <AvatarImage
                               src={user.avatar_url || `/placeholder.svg?height=40&width=40&query=user`}
                               alt={user.full_name || user.email}
+                              width={40}
+                              height={40}
                             />
                             <AvatarFallback>
                               {user.full_name
@@ -393,13 +408,12 @@ export default async function AdminDashboardPage() {
                       <th className="p-2 text-left font-medium">Usuario</th>
                       <th className="p-2 text-left font-medium">Email</th>
                       <th className="p-2 text-left font-medium">Fecha de registro</th>
-                      <th className="p-2 text-left font-medium">Rol</th>
                       <th className="p-2 text-left font-medium">Estado</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {allUsers && allUsers.length > 0 ? (
-                      allUsers.map((user) => (
+                    {recentUsers && recentUsers.length > 0 ? (
+                      recentUsers.map((user) => (
                         <tr key={user.id} className="border-b">
                           <td className="p-2">
                             <div className="flex items-center gap-2">
@@ -407,6 +421,8 @@ export default async function AdminDashboardPage() {
                                 <AvatarImage
                                   src={user.avatar_url || "/placeholder.svg?height=32&width=32&query=person"}
                                   alt={user.full_name || user.email}
+                                  width={32}
+                                  height={32}
                                 />
                                 <AvatarFallback>
                                   {user.full_name
@@ -419,31 +435,17 @@ export default async function AdminDashboardPage() {
                           </td>
                           <td className="p-2 truncate max-w-[200px]">{user.email}</td>
                           <td className="p-2">{new Date(user.created_at).toLocaleDateString()}</td>
-                          <td className="p-2">{user.role || "usuario"}</td>
                           <td className="p-2">
-                            <span
-                              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                                user.status === "active"
-                                  ? "bg-green-100 text-green-800"
-                                  : user.status === "inactive"
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-yellow-100 text-yellow-800"
-                              }`}
-                            >
-                              <CheckCircle className="mr-1 h-3 w-3" />
-                              {user.status === "active"
-                                ? "Activo"
-                                : user.status === "inactive"
-                                  ? "Inactivo"
-                                  : "Pendiente"}
+                            <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-green-100 text-green-800">
+                              <CheckCircle className="mr-1 h-3 w-3" /> Activo
                             </span>
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={5} className="p-4 text-center text-muted-foreground">
-                          No hay usuarios registrados
+                        <td colSpan={4} className="p-4 text-center text-muted-foreground">
+                          No hay usuarios registrados recientemente
                         </td>
                       </tr>
                     )}
@@ -472,14 +474,13 @@ export default async function AdminDashboardPage() {
                     <tr className="border-b bg-muted/50">
                       <th className="p-2 text-left font-medium">Documento</th>
                       <th className="p-2 text-left font-medium">Usuario</th>
-                      <th className="p-2 text-left font-medium">Tipo</th>
                       <th className="p-2 text-left font-medium">Fecha</th>
                       <th className="p-2 text-left font-medium">Estado</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {allDocuments && allDocuments.length > 0 ? (
-                      allDocuments.map((doc) => {
+                    {recentDocuments && recentDocuments.length > 0 ? (
+                      recentDocuments.map((doc) => {
                         const docUser = userMap[doc.user_id] || { full_name: "Usuario desconocido", email: "" }
                         return (
                           <tr key={doc.id} className="border-b">
@@ -492,7 +493,6 @@ export default async function AdminDashboardPage() {
                             <td className="p-2 truncate max-w-[200px]">
                               {docUser.full_name || docUser.email || doc.user_id}
                             </td>
-                            <td className="p-2">{doc.type || "Documento"}</td>
                             <td className="p-2">{new Date(doc.created_at).toLocaleDateString()}</td>
                             <td className="p-2">
                               {doc.status === "approved" && (
@@ -516,8 +516,8 @@ export default async function AdminDashboardPage() {
                       })
                     ) : (
                       <tr>
-                        <td colSpan={5} className="p-4 text-center text-muted-foreground">
-                          No hay documentos subidos
+                        <td colSpan={4} className="p-4 text-center text-muted-foreground">
+                          No hay documentos subidos recientemente
                         </td>
                       </tr>
                     )}

@@ -55,7 +55,7 @@ export async function middleware(request: NextRequest) {
   )
 
   try {
-    // Verificar si hay una sesión activa - usar getSession() que es más eficiente
+    // Verificar si hay una sesión activa
     const {
       data: { session },
     } = await supabase.auth.getSession()
@@ -69,60 +69,24 @@ export async function middleware(request: NextRequest) {
       return response
     }
 
-    // Verificar si la ruta actual es /auth/login y el usuario ya está autenticado
+    // Si el usuario está autenticado y trata de acceder a la página de login
     if (request.nextUrl.pathname === "/auth/login" && session) {
-      // Obtener el rol directamente de los metadatos del usuario si está disponible
+      // Obtener el rol del usuario
       const userRole = session.user.user_metadata?.role || "user"
 
-      // Redirigir a los usuarios autenticados fuera de la página de login
+      // Redirigir según el rol
       const redirectUrl = new URL(userRole === "admin" ? "/admin/dashboard" : "/dashboard", request.url)
       return NextResponse.redirect(redirectUrl)
     }
 
-    // Obtener el rol del usuario directamente de la sesión o metadatos
-    // Evitamos hacer una solicitud fetch a nuestra propia API
-    let userRole = session.user.user_metadata?.role || null
-
-    // Si no tenemos el rol en los metadatos, intentamos obtenerlo de la tabla profiles
-    // pero solo si no estamos en una ruta que pueda causar recursión
-    if (!userRole) {
-      try {
-        // Consulta directa a la tabla profiles usando el cliente de Supabase
-        const { data, error } = await supabase.from("profiles").select("role").eq("id", session.user.id).maybeSingle()
-
-        if (!error && data) {
-          userRole = data.role
-          console.log("Middleware - User role from profiles:", userRole)
-        } else if (error) {
-          console.log("Error al obtener el rol del usuario:", error.message)
-          // Si hay un error con la consulta, asumimos un rol por defecto
-          userRole = "user"
-        }
-      } catch (roleError) {
-        console.error("Error al consultar el rol:", roleError)
-        userRole = "user"
-      }
-    }
-
-    // Si aún no tenemos un rol, asumimos 'user' por defecto
-    userRole = userRole || "user"
-    console.log("Middleware - User ID:", session.user.id)
-    console.log("Middleware - User role:", userRole)
-
     // Verificar el rol para rutas de administrador
     if (request.nextUrl.pathname.startsWith("/admin")) {
-      if (userRole !== "admin") {
-        console.log("Middleware - Redirecting non-admin from admin route")
-        const redirectUrl = new URL("/dashboard", request.url)
-        return NextResponse.redirect(redirectUrl)
-      }
-    }
+      // Obtener el rol del usuario
+      const userRole = session.user.user_metadata?.role || "user"
 
-    // Verificar el rol para rutas de usuario
-    if (request.nextUrl.pathname.startsWith("/dashboard")) {
-      if (userRole === "admin") {
-        console.log("Middleware - Redirecting admin to admin dashboard")
-        const redirectUrl = new URL("/admin/dashboard", request.url)
+      if (userRole !== "admin") {
+        console.log("Middleware - Redirigiendo usuario no admin desde ruta admin")
+        const redirectUrl = new URL("/dashboard", request.url)
         return NextResponse.redirect(redirectUrl)
       }
     }
