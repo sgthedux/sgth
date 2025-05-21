@@ -76,15 +76,19 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
           }}
         />
         <main className="flex-1 p-4 md:p-6 overflow-hidden">
-          <ProfileContent
-            userId={user!.id}
-            allProfileData={allProfileData}
-            isLoading={profileDataLoading}
-            activeSection={activeSection}
-            activeTab={activeTab}
-          >
-            {children}
-          </ProfileContent>
+          {user ? (
+            <ProfileContent
+              userId={user.id}
+              allProfileData={allProfileData}
+              isLoading={profileDataLoading}
+              activeSection={activeSection}
+              activeTab={activeTab}
+            >
+              {children}
+            </ProfileContent>
+          ) : (
+            <LoadingState message="Cargando usuario..." />
+          )}
         </main>
       </div>
     </div>
