@@ -202,6 +202,11 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
       icon: <Users className="h-5 w-5" />,
     },
     {
+      title: "Documentos",
+      href: "/admin/documents",
+      icon: <FolderOpen className="h-5 w-5" />,
+    },
+    {
       title: "Reportes",
       href: "/admin/reports",
       icon: <BarChart className="h-5 w-5" />,

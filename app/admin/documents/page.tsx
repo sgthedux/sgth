@@ -1,10 +1,7 @@
 import { redirect } from "next/navigation"
-import { DocumentList } from "@/components/profile/document-list"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
-
-// Forzar renderizado dinámico si se usan cookies o searchParams
-export const dynamic = "force-dynamic"
+import { UserDocumentsClient } from "./client"
 
 export default async function AdminDocumentsPage() {
   try {
@@ -59,28 +56,44 @@ export default async function AdminDocumentsPage() {
 
     console.log("User is admin, fetching documents")
 
-    // Obtener todos los documentos
+    // Obtener todos los documentos con información del usuario
     const { data: documents, error: documentsError } = await supabase
       .from("documents")
-      .select("*, profiles(full_name)")
+      .select("*, profiles(id, full_name, email)")
       .order("created_at", { ascending: false })
 
     if (documentsError) {
       console.error("Error fetching documents:", documentsError.message)
     }
 
-    console.log(`Found ${documents?.length || 0} documents`)
+    // Agrupar documentos por usuario
+    const documentsByUser = documents?.reduce(
+      (acc, doc) => {
+        const userId = (doc.profiles as any)?.id || "unknown"
+        const userName = (doc.profiles as any)?.full_name || "Usuario desconocido"
 
-    // Formatear documentos para el componente
-    const formattedDocuments =
-      documents?.map((doc) => ({
-        id: doc.id,
-        name: `${doc.name} (${(doc.profiles as any)?.full_name || "Usuario"})`,
-        type: doc.type,
-        url: doc.url,
-        status: doc.status,
-        created_at: doc.created_at,
-      })) || []
+        if (!acc[userId]) {
+          acc[userId] = {
+            userName,
+            documents: [],
+          }
+        }
+
+        acc[userId].documents.push({
+          id: doc.id,
+          name: doc.name,
+          type: doc.type,
+          url: doc.url,
+          status: doc.status,
+          created_at: doc.created_at,
+        })
+
+        return acc
+      },
+      {} as Record<string, { userName: string; documents: any[] }>,
+    )
+
+    console.log(`Documentos agrupados por ${Object.keys(documentsByUser || {}).length} usuarios`)
 
     return (
       <div className="space-y-6">
@@ -89,7 +102,7 @@ export default async function AdminDocumentsPage() {
           <p className="text-muted-foreground">Gestiona los documentos de todos los usuarios</p>
         </div>
 
-        <DocumentList userId="" documents={formattedDocuments} isAdmin={true} />
+        <UserDocumentsClient documentsByUser={documentsByUser || {}} />
       </div>
     )
   } catch (error) {
