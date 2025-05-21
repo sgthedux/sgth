@@ -13,7 +13,8 @@ import {
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { UserAvatar } from "@/components/user-avatar"
-import { memo } from "react"
+import { memo, useState } from "react"
+import { Loader2 } from "lucide-react"
 
 interface UserNavProps {
   user: {
@@ -27,11 +28,37 @@ interface UserNavProps {
 export const UserNav = memo(function UserNav({ user, isAdmin = false }: UserNavProps) {
   const router = useRouter()
   const supabase = createClient()
+  const [isSigningOut, setIsSigningOut] = useState(false)
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    router.push("/auth/login")
-    router.refresh()
+    try {
+      setIsSigningOut(true)
+
+      // Cerrar sesión en Supabase
+      const { error } = await supabase.auth.signOut()
+
+      if (error) {
+        console.error("Error al cerrar sesión:", error.message)
+        throw error
+      }
+
+      // Limpiar cualquier estado local o cookies si es necesario
+      localStorage.removeItem("supabase.auth.token")
+
+      // Pequeña pausa para asegurar que todo se procese
+      await new Promise((resolve) => setTimeout(resolve, 300))
+
+      // Redirigir al usuario a la página de inicio de sesión
+      window.location.href = "/auth/login"
+
+      // No usamos router.push aquí porque queremos un refresh completo
+      // router.push("/auth/login")
+      // router.refresh()
+    } catch (error) {
+      console.error("Error durante el cierre de sesión:", error)
+      alert("Hubo un problema al cerrar sesión. Por favor, intenta de nuevo.")
+      setIsSigningOut(false)
+    }
   }
 
   return (
@@ -53,10 +80,18 @@ export const UserNav = memo(function UserNav({ user, isAdmin = false }: UserNavP
           <DropdownMenuItem onClick={() => router.push(isAdmin ? "/admin/profile" : "/profile")}>
             Perfil
           </DropdownMenuItem>
-          {isAdmin && <DropdownMenuItem onClick={() => router.push("/admin/settings")}>Configuración</DropdownMenuItem>}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleSignOut}>Cerrar sesión</DropdownMenuItem>
+        <DropdownMenuItem onClick={handleSignOut} disabled={isSigningOut} className="text-red-500 focus:text-red-500">
+          {isSigningOut ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Cerrando sesión...
+            </>
+          ) : (
+            "Cerrar sesión"
+          )}
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
