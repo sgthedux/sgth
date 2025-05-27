@@ -1,5 +1,7 @@
 "use client"
 
+import { CardFooter } from "@/components/ui/card"
+
 import { Label } from "@/components/ui/label"
 
 import type React from "react"
@@ -8,14 +10,15 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlertCircle, Plus } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Plus } from "lucide-react"
 import { DocumentUpload } from "@/components/profile/document-upload"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { DeleteConfirmation } from "@/components/delete-confirmation"
 import { ValidatedInput } from "@/components/ui/validated-input"
 import { validationRules } from "@/lib/validations"
+import { useUser } from "@/hooks/use-user"
+import { useToast } from "@/components/ui/use-toast"
 
 interface LanguageFormProps {
   userId: string
@@ -64,29 +67,33 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
     }>
   >([])
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
-  const [loadingData, setLoadingData] = useState(true)
+  const { toast } = useToast()
+  const [retryCount, setRetryCount] = useState(0)
+  const supabase = createClient()
 
   // Cargar los idiomas al iniciar
   useEffect(() => {
     const loadLanguages = async () => {
       try {
-        setLoadingData(true)
+        setLoading(true)
         console.log("Cargando idiomas existentes para usuario:", userId)
 
-        const response = await fetch(`/api/profile-data?type=languages&userId=${userId}`)
-        if (!response.ok) {
-          throw new Error(`Error HTTP: ${response.status}`)
-        }
+        const { data: existingLanguages, error: existingLanguagesError } = await supabase
+          .from("languages")
+          .select("*")
+          .eq("user_id", userId)
 
-        const data = await response.json()
-        console.log("Respuesta de idiomas:", data)
-
-        if (data.success && data.data && data.data.length > 0) {
+        if (existingLanguagesError) {
+          console.error("Error fetching existing languages:", existingLanguagesError)
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Error al cargar los idiomas existentes",
+          })
+        } else if (existingLanguages && existingLanguages.length > 0) {
           setItems(
-            data.data.map((lang: any) => ({
+            existingLanguages.map((lang) => ({
               id: lang.id || "",
               language: lang.language || "",
               speaking_level: lang.speaking_level || "",
@@ -94,7 +101,7 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
               writing_level: lang.writing_level || "",
             })),
           )
-          console.log("Datos de idiomas cargados exitosamente:", data.data.length, "registros")
+          console.log("Datos de idiomas cargados exitosamente")
         } else {
           // Si no hay idiomas, inicializar con un elemento vacío
           setItems([
@@ -110,26 +117,18 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
         }
       } catch (error: any) {
         console.error("Error al cargar idiomas:", error)
-        setError("Error al cargar los idiomas existentes")
-        // En caso de error, inicializar con elemento vacío
-        setItems([
-          {
-            id: "",
-            language: "",
-            speaking_level: "",
-            reading_level: "",
-            writing_level: "",
-          },
-        ])
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Error al cargar los idiomas existentes",
+        })
       } finally {
-        setLoadingData(false)
+        setLoading(false)
         setIsInitialized(true)
       }
     }
 
-    if (userId) {
-      loadLanguages()
-    }
+    loadLanguages()
   }, [userId])
 
   const handleAddItem = () => {
@@ -154,8 +153,6 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setError(null)
-    setSuccessMessage(null)
 
     try {
       // Validar que todos los campos requeridos estén completos
@@ -177,7 +174,7 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
 
       if (deleteError) throw deleteError
 
-      // Insertar los nuevos idiomas con reintentos
+      // Insertar los nuevos idiomas with reintentos
       const languageData = items.map((item) => ({
         user_id: userId,
         language: item.language,
@@ -199,7 +196,11 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
 
       if (profileError) throw profileError
 
-      setSuccessMessage("Idiomas guardados correctamente")
+      toast({
+        variant: "success",
+        title: "Éxito",
+        description: "Idiomas guardados correctamente",
+      })
 
       // Refrescar la página después de un breve retraso
       setTimeout(() => {
@@ -210,9 +211,17 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
 
       // Manejar específicamente errores de rate limiting
       if (error.message && error.message.includes("Too Many")) {
-        setError("Demasiadas solicitudes. Por favor, espere un momento e intente guardar nuevamente.")
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Demasiadas solicitudes. Por favor, espere un momento e intente guardar nuevamente.",
+        })
       } else {
-        setError(error.message || "Error al guardar los idiomas")
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error.message || "Error al guardar los idiomas",
+        })
       }
     } finally {
       setLoading(false)
@@ -243,12 +252,24 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
 
       setItems(newItems)
 
+      toast({
+        variant: "success",
+        title: "Éxito",
+        description: `Idioma ${index + 1} eliminado correctamente`,
+      })
+
       // Refrescar la página después de un breve retraso
       setTimeout(() => {
         router.refresh()
       }, 1000)
     } catch (error: any) {
       console.error("Error al eliminar el idioma:", error)
+
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: `Error al eliminar el idioma: ${error.message || "Error desconocido"}`,
+      })
 
       // Quitar el estado "eliminando" si hay error
       const updatedItems = [...items]
@@ -264,14 +285,12 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
   ]
 
   // Mostrar un indicador de carga mientras se inicializa
-  if (!isInitialized || loadingData) {
+  if (!isInitialized) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Idiomas</CardTitle>
-          <CardDescription>
-            {error ? <span className="text-red-500">{error}</span> : "Cargando información de idiomas..."}
-          </CardDescription>
+          <CardDescription>Cargando información de idiomas...</CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center p-6">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -288,19 +307,6 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-6">
-          {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {successMessage && (
-            <Alert variant="default" className="bg-green-50 text-green-800 border-green-200">
-              <AlertDescription>{successMessage}</AlertDescription>
-            </Alert>
-          )}
-
           {items.map((item, index) => (
             <div key={index} className={`space-y-4 p-4 border rounded-lg ${item.isDeleting ? "opacity-50" : ""}`}>
               <div className="flex justify-between items-center">
@@ -316,12 +322,18 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
                     userId={userId}
                     documentKey={`${userId}/language_${index}`}
                     onSuccess={() => {
-                      setSuccessMessage(`Idioma ${index + 1} eliminado correctamente`)
-                      setTimeout(() => setSuccessMessage(null), 3000)
+                      toast({
+                        variant: "success",
+                        title: "Éxito",
+                        description: `Idioma ${index + 1} eliminado correctamente`,
+                      })
                     }}
                     onError={(error) => {
-                      setError(`Error al eliminar el idioma: ${error.message || "Error desconocido"}`)
-                      setTimeout(() => setError(null), 3000)
+                      toast({
+                        variant: "destructive",
+                        title: "Error",
+                        description: `Error al eliminar el idioma: ${error.message || "Error desconocido"}`,
+                      })
                     }}
                     disabled={loading || item.isDeleting}
                   />
@@ -331,12 +343,12 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
               <div className="space-y-2">
                 <ValidatedInput
                   id={`language-${index}`}
-                  label="Idioma *"
+                  label="Idioma"
                   value={item.language}
                   onChange={(e) => handleItemChange(index, "language", e.target.value)}
                   validationRules={[validationRules.required, validationRules.name]}
                   sanitizer="name"
-                  required
+                  required={true}
                   disabled={loading || item.isDeleting}
                 />
               </div>
@@ -404,7 +416,6 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
                   documentType={`language_${index}`}
                   itemId={`language_${index}`}
                   label="Subir certificado de idioma"
-                  disabled={loading || item.isDeleting}
                 />
               </div>
             </div>

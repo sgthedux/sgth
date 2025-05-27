@@ -9,8 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { AlertCircle, Plus } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Plus } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DocumentUpload } from "@/components/profile/document-upload"
@@ -18,6 +17,9 @@ import { DatePicker } from "@/components/date-picker"
 import { DeleteConfirmation } from "@/components/delete-confirmation"
 import { ValidatedInput } from "@/components/ui/validated-input"
 import { validationRules } from "@/lib/validations"
+import { useUser } from "@/hooks/use-user"
+
+import { useToast } from "@/components/ui/use-toast"
 
 interface EducationFormProps {
   userId: string
@@ -46,6 +48,7 @@ interface EducationFormProps {
 export function EducationForm({ userId, educations = [] }: EducationFormProps) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("basic")
+  const { user } = useUser()
   const [loadingData, setLoadingData] = useState(true)
   const [items, setItems] = useState(
     educations.length > 0
@@ -74,45 +77,11 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
         ],
   )
   const [loading, setLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const { toast } = useToast()
   const [academicModalities, setAcademicModalities] = useState<any[]>([])
   const supabase = createClient()
-
-  // Cargar datos existentes del usuario
-  useEffect(() => {
-    const loadExistingData = async () => {
-      try {
-        setLoadingData(true)
-        console.log("Cargando educación existente para usuario:", userId)
-
-        const response = await fetch(`/api/profile-data?type=education&userId=${userId}`)
-        if (!response.ok) {
-          throw new Error(`Error HTTP: ${response.status}`)
-        }
-
-        const data = await response.json()
-        console.log("Respuesta de educación:", data)
-
-        if (data.success && data.data && data.data.length > 0) {
-          setItems(data.data)
-          console.log("Datos de educación cargados exitosamente:", data.data.length, "registros")
-        } else {
-          console.log("No se encontró educación existente")
-          // Mantener el elemento vacío por defecto
-        }
-      } catch (error) {
-        console.error("Error cargando educación existente:", error)
-        setError("Error al cargar los datos existentes")
-      } finally {
-        setLoadingData(false)
-      }
-    }
-
-    if (userId) {
-      loadExistingData()
-    }
-  }, [userId])
 
   // Cargar catálogos
   useEffect(() => {
@@ -133,6 +102,44 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
 
     loadCatalogs()
   }, [supabase])
+
+  // Cargar datos existentes del usuario
+  useEffect(() => {
+    const loadExistingData = async () => {
+      if (!user?.id) return
+
+      try {
+        setLoadingData(true)
+        console.log("Cargando educación existente para usuario:", user.id)
+
+        const { data: existingEducation, error: existingEducationError } = await supabase
+          .from("education")
+          .select("*")
+          .eq("user_id", user.id);
+
+        if (existingEducationError) {
+          console.error("Error fetching existing education:", existingEducationError)
+          // Handle error appropriately
+        } else if (existingEducation && existingEducation.length > 0) {
+          setItems(existingEducation)
+          console.log("Datos de educación cargados exitosamente")
+        } else {
+          console.log("No se encontró educación existente")
+        }
+      } catch (error) {
+        console.error("Error cargando educación existente:", error)
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Error al cargar los datos existentes",
+        })
+      } finally {
+        setLoadingData(false)
+      }
+    }
+
+    loadExistingData()
+  }, [user?.id, toast])
 
   const handleAddItem = (type: string) => {
     setItems([
@@ -167,12 +174,18 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
       newItems.splice(index, 1)
       setItems(newItems)
 
-      setSuccessMessage(`Educación ${index + 1} eliminada correctamente`)
-      setTimeout(() => setSuccessMessage(null), 3000)
+      toast({
+        variant: "success",
+        title: "Éxito",
+        description: `Educación ${index + 1} eliminada correctamente`,
+      })
     } catch (error) {
       console.error("Error al eliminar la educación:", error)
-      setError("Error al eliminar la educación. Inténtelo de nuevo.")
-      setTimeout(() => setError(null), 3000)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error al eliminar la educación. Inténtelo de nuevo.",
+      })
     }
   }
 
@@ -185,8 +198,6 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setError(null)
-    setSuccessMessage(null)
 
     try {
       // Delete existing education records
@@ -239,14 +250,22 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
 
       if (profileError) throw profileError
 
-      setSuccessMessage("Información educativa guardada correctamente")
+      toast({
+        variant: "success",
+        title: "Éxito",
+        description: "Información educativa guardada correctamente",
+      })
 
       // Esperar un momento antes de refrescar para que el usuario vea el mensaje de éxito
       setTimeout(() => {
         router.refresh()
       }, 1500)
     } catch (error: any) {
-      setError(error.message || "Error al guardar la información educativa")
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Error al guardar la información educativa",
+      })
     } finally {
       setLoading(false)
     }
@@ -278,19 +297,6 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-6">
-          {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {successMessage && (
-            <Alert variant="default" className="bg-green-50 text-green-800 border-green-200">
-              <AlertDescription>{successMessage}</AlertDescription>
-            </Alert>
-          )}
-
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid grid-cols-2 mb-4">
               <TabsTrigger value="basic">Educación Básica y Media</TabsTrigger>
@@ -318,12 +324,18 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                           userId={userId}
                           documentKey={`${userId}/education_basic_${index}`}
                           onSuccess={() => {
-                            setSuccessMessage(`Educación básica ${index + 1} eliminada correctamente`)
-                            setTimeout(() => setSuccessMessage(null), 3000)
+                            toast({
+                              variant: "success",
+                              title: "Éxito",
+                              description: `Educación básica ${index + 1} eliminada correctamente`,
+                            })
                           }}
                           onError={(error) => {
-                            setError(`Error al eliminar: ${error.message}`)
-                            setTimeout(() => setError(null), 3000)
+                            toast({
+                              variant: "destructive",
+                              title: "Error",
+                              description: `Error al eliminar: ${error.message}`,
+                            })
                           }}
                         />
                       )}
@@ -371,7 +383,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                       <div className="space-y-2">
                         <ValidatedInput
                           id={`institution-${index}`}
-                          label="Institución Educativa *"
+                          label="Institución Educativa"
                           value={item.institution}
                           onChange={(e) => handleItemChange(itemIndex, "institution", e.target.value)}
                           validationRules={[validationRules.required, validationRules.text]}
@@ -383,7 +395,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                       <div className="space-y-2">
                         <ValidatedInput
                           id={`degree-${index}`}
-                          label="Título Obtenido *"
+                          label="Título Obtenido"
                           value={item.degree}
                           onChange={(e) => handleItemChange(itemIndex, "degree", e.target.value)}
                           validationRules={[validationRules.required, validationRules.text]}
@@ -397,7 +409,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                       <div className="space-y-2">
                         <ValidatedInput
                           id={`institution-country-${index}`}
-                          label="País de la Institución *"
+                          label="País de la Institución"
                           value={item.institution_country || "Colombia"}
                           onChange={(e) => handleItemChange(itemIndex, "institution_country", e.target.value)}
                           validationRules={[validationRules.required, validationRules.name]}
@@ -461,12 +473,18 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                           userId={userId}
                           documentKey={`${userId}/education_higher_${index}`}
                           onSuccess={() => {
-                            setSuccessMessage(`Educación superior ${index + 1} eliminada correctamente`)
-                            setTimeout(() => setSuccessMessage(null), 3000)
+                            toast({
+                              variant: "success",
+                              title: "Éxito",
+                              description: `Educación superior ${index + 1} eliminada correctamente`,
+                            })
                           }}
                           onError={(error) => {
-                            setError(`Error al eliminar: ${error.message}`)
-                            setTimeout(() => setError(null), 3000)
+                            toast({
+                              variant: "destructive",
+                              title: "Error",
+                              description: `Error al eliminar: ${error.message}`,
+                            })
                           }}
                         />
                       )}
@@ -476,7 +494,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                       <div className="space-y-2">
                         <ValidatedInput
                           id={`institution-higher-${index}`}
-                          label="Institución Educativa *"
+                          label="Institución Educativa"
                           value={item.institution}
                           onChange={(e) => handleItemChange(itemIndex, "institution", e.target.value)}
                           validationRules={[validationRules.required, validationRules.text]}
@@ -503,7 +521,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                       <div className="space-y-2">
                         <ValidatedInput
                           id={`institution-country-${index}`}
-                          label="País de la Institución *"
+                          label="País de la Institución"
                           value={item.institution_country || "Colombia"}
                           onChange={(e) => handleItemChange(itemIndex, "institution_country", e.target.value)}
                           validationRules={[validationRules.required, validationRules.name]}
@@ -568,7 +586,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                       <div className="space-y-2">
                         <ValidatedInput
                           id={`semesters-${index}`}
-                          label="Número de Semestres Aprobados *"
+                          label="Número de Semestres Aprobados"
                           type="number"
                           min="0"
                           max="20"
@@ -600,8 +618,8 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                         <Label htmlFor={`title-validated-${index}`}>Título Convalidado</Label>
                         <div className="flex items-center h-10 space-x-2">
                           <Checkbox
-                            id={`title-validated-${index}`}
-                            checked={item.title_validated}
+                            id={`title_validated_${index}`}
+                            checked={item.title_validated ?? false}
                             onCheckedChange={(checked) => handleItemChange(itemIndex, "title_validated", !!checked)}
                           />
                           <Label htmlFor={`title-validated-${index}`}>Sí</Label>
@@ -613,7 +631,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                       <div className="space-y-2">
                         <ValidatedInput
                           id={`degree-higher-${index}`}
-                          label="Título Obtenido *"
+                          label="Título Obtenido"
                           value={item.degree}
                           onChange={(e) => handleItemChange(itemIndex, "degree", e.target.value)}
                           validationRules={[validationRules.required, validationRules.text]}
@@ -625,7 +643,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                       <div className="space-y-2">
                         <ValidatedInput
                           id={`field-${index}`}
-                          label="Área de Estudio *"
+                          label="Área de Estudio"
                           value={item.field_of_study}
                           onChange={(e) => handleItemChange(itemIndex, "field_of_study", e.target.value)}
                           validationRules={[validationRules.required, validationRules.text]}

@@ -9,8 +9,6 @@ import { Button } from "@/components/ui/button"
 import { ValidatedInput } from "@/components/ui/validated-input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlertCircle } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DocumentUpload } from "@/components/profile/document-upload"
@@ -19,6 +17,7 @@ import { Separator } from "@/components/ui/separator"
 import { DatePicker } from "@/components/date-picker"
 import { validationRules } from "@/lib/validations"
 import { useUser } from "@/hooks/use-user"
+import { useToast } from "@/components/ui/use-toast"
 
 interface Props {
   userId: string
@@ -59,11 +58,12 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
   const { user } = useUser()
   const [loading, setLoading] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("identification")
   const [documentTypes, setDocumentTypes] = useState<any[]>([])
   const [maritalStatusOptions, setMaritalStatusOptions] = useState<any[]>([])
   const [validationErrors, setValidationErrors] = useState<Record<string, string | null>>({})
+
+  const { toast } = useToast()
 
   // Identification data
   const [firstSurname, setFirstSurname] = useState<string>("")
@@ -201,14 +201,18 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
         }
       } catch (error) {
         console.error("Error cargando datos existentes:", error)
-        setError("Error al cargar los datos existentes")
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Error al cargar los datos existentes",
+        })
       } finally {
         setLoadingData(false)
       }
     }
 
     loadExistingData()
-  }, [user?.id])
+  }, [user?.id, toast])
 
   // Cargar catálogos
   useEffect(() => {
@@ -241,12 +245,27 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
     e.preventDefault()
 
     if (!isFormValid) {
-      setError("Por favor complete todos los campos obligatorios y corrija los errores de validación")
+      // Identificar campos faltantes
+      const missingFields = []
+      if (!firstSurname.trim()) missingFields.push("Primer Apellido")
+      if (!firstName.trim()) missingFields.push("Primer Nombre")
+      if (!identificationType) missingFields.push("Tipo de Documento")
+      if (!identificationNumber.trim()) missingFields.push("Número de Identificación")
+
+      const missingFieldsText =
+        missingFields.length > 1
+          ? `${missingFields.slice(0, -1).join(", ")} y ${missingFields[missingFields.length - 1]}`
+          : missingFields[0]
+
+      toast({
+        variant: "destructive",
+        title: "Campos obligatorios faltantes",
+        description: `Por favor complete: ${missingFieldsText}`,
+      })
       return
     }
 
     setLoading(true)
-    setError(null)
 
     try {
       const personalInfoData = {
@@ -319,12 +338,19 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
       if (profileError) throw profileError
 
       // Mostrar mensaje de éxito
-      setError(null)
-      alert("Información personal guardada correctamente")
+      toast({
+        variant: "success",
+        title: "Éxito",
+        description: "Información personal guardada correctamente",
+      })
 
       router.refresh()
     } catch (error: any) {
-      setError(error.message || "Error al guardar la información personal")
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Error al guardar la información personal",
+      })
     } finally {
       setLoading(false)
     }
@@ -362,13 +388,6 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
         <CardDescription>Ingrese su información personal completa</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid grid-cols-3 mb-4">
             <TabsTrigger value="identification">Identificación</TabsTrigger>
@@ -390,7 +409,7 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                   validationRules={[validationRules.required, validationRules.name]}
                   sanitizer="name"
                   onValidationChange={handleValidationChange("firstSurname")}
-                  required
+                  required={true}
                 />
 
                 <ValidatedInput
@@ -413,7 +432,7 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                   validationRules={[validationRules.required, validationRules.name]}
                   sanitizer="name"
                   onValidationChange={handleValidationChange("firstName")}
-                  required
+                  required={true}
                 />
 
                 <ValidatedInput
@@ -454,7 +473,7 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                   validationRules={[validationRules.required, validationRules.identification]}
                   sanitizer="identification"
                   onValidationChange={handleValidationChange("identificationNumber")}
-                  required
+                  required={true}
                 />
               </div>
 
@@ -798,9 +817,31 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 </Button>
                 <Button
                   type="button"
-                  onClick={handleSubmit}
-                  disabled={loading || !isFormValid}
-                  className={!isFormValid ? "opacity-50 cursor-not-allowed" : ""}
+                  onClick={
+                    isFormValid
+                      ? handleSubmit
+                      : () => {
+                          // Identificar campos faltantes cuando el botón está desactivado
+                          const missingFields = []
+                          if (!firstSurname.trim()) missingFields.push("Primer Apellido")
+                          if (!firstName.trim()) missingFields.push("Primer Nombre")
+                          if (!identificationType) missingFields.push("Tipo de Documento")
+                          if (!identificationNumber.trim()) missingFields.push("Número de Identificación")
+
+                          const missingFieldsText =
+                            missingFields.length > 1
+                              ? `${missingFields.slice(0, -1).join(", ")} y ${missingFields[missingFields.length - 1]}`
+                              : missingFields[0]
+
+                          toast({
+                            variant: "destructive",
+                            title: "No se puede guardar",
+                            description: `Faltan campos obligatorios: ${missingFieldsText}`,
+                          })
+                        }
+                  }
+                  disabled={loading}
+                  className={!isFormValid ? "opacity-50 cursor-pointer" : ""}
                 >
                   {loading ? "Guardando..." : "Guardar Información Personal"}
                 </Button>

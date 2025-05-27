@@ -9,8 +9,7 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlertCircle, Plus } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Plus } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { DocumentUpload } from "@/components/profile/document-upload"
 import { DatePicker } from "@/components/date-picker"
@@ -18,6 +17,9 @@ import { DeleteConfirmation } from "@/components/delete-confirmation"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ValidatedInput } from "@/components/ui/validated-input"
 import { validationRules } from "@/lib/validations"
+import { useUser } from "@/hooks/use-user"
+
+import { useToast } from "@/components/ui/use-toast"
 
 interface ExperienceFormProps {
   userId: string
@@ -41,6 +43,7 @@ interface ExperienceFormProps {
 
 export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps) {
   const router = useRouter()
+  const { user } = useUser()
   const [loadingData, setLoadingData] = useState(true)
   const [items, setItems] = useState(
     experiences.length > 0
@@ -65,44 +68,49 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
         ],
   )
   const [loading, setLoading] = useState(false)
+  const { toast } = useToast()
+
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const supabase = createClient()
 
   // Cargar datos existentes del usuario
   useEffect(() => {
     const loadExistingData = async () => {
+      if (!user?.id) return
+
       try {
         setLoadingData(true)
-        console.log("Cargando experiencia existente para usuario:", userId)
+        console.log("Cargando experiencia existente para usuario:", user.id)
 
-        const response = await fetch(`/api/profile-data?type=experience&userId=${userId}`)
-        if (!response.ok) {
-          throw new Error(`Error HTTP: ${response.status}`)
-        }
+        const { data: existingExperience, error: existingExperienceError } = await supabase
+          .from("experience")
+          .select("*")
+          .eq("user_id", user.id);
 
-        const data = await response.json()
-        console.log("Respuesta de experiencia:", data)
-
-        if (data.success && data.data && data.data.length > 0) {
-          setItems(data.data)
-          console.log("Datos de experiencia cargados exitosamente:", data.data.length, "registros")
+        if (existingExperienceError) {
+          console.error("Error fetching existing experience:", existingExperienceError)
+          // Handle error appropriately
+        } else if (existingExperience && existingExperience.length > 0) {
+          setItems(existingExperience)
+          console.log("Datos de experiencia cargados exitosamente")
         } else {
           console.log("No se encontró experiencia existente")
-          // Mantener el elemento vacío por defecto
         }
       } catch (error) {
         console.error("Error cargando experiencia existente:", error)
-        setError("Error al cargar los datos existentes")
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Error al cargar los datos existentes",
+        })
       } finally {
         setLoadingData(false)
       }
     }
 
-    if (userId) {
-      loadExistingData()
-    }
-  }, [userId])
+    loadExistingData()
+  }, [user?.id])
 
   const handleAddItem = () => {
     setItems([
@@ -133,12 +141,18 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
       newItems.splice(index, 1)
       setItems(newItems)
 
-      setSuccessMessage(`Experiencia ${index + 1} eliminada correctamente`)
-      setTimeout(() => setSuccessMessage(null), 3000)
+      toast({
+        variant: "success",
+        title: "Éxito",
+        description: `Experiencia ${index + 1} eliminada correctamente`,
+      })
     } catch (error) {
       console.error("Error al eliminar la experiencia:", error)
-      setError("Error al eliminar la experiencia. Inténtelo de nuevo.")
-      setTimeout(() => setError(null), 3000)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error al eliminar la experiencia. Inténtelo de nuevo.",
+      })
     }
   }
 
@@ -163,8 +177,6 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setError(null)
-    setSuccessMessage(null)
 
     try {
       // Delete existing experience records
@@ -208,14 +220,22 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
 
       if (profileError) throw profileError
 
-      setSuccessMessage("Experiencia laboral guardada correctamente")
+      toast({
+        variant: "success",
+        title: "Éxito",
+        description: "Experiencia laboral guardada correctamente",
+      })
 
       // Esperar un momento antes de refrescar para que el usuario vea el mensaje de éxito
       setTimeout(() => {
         router.refresh()
       }, 1500)
     } catch (error: any) {
-      setError(error.message || "Error al guardar la experiencia laboral")
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Error al guardar la experiencia laboral",
+      })
     } finally {
       setLoading(false)
     }
@@ -244,19 +264,6 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-6">
-          {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {successMessage && (
-            <Alert variant="default" className="bg-green-50 text-green-800 border-green-200">
-              <AlertDescription>{successMessage}</AlertDescription>
-            </Alert>
-          )}
-
           {items.map((item, index) => (
             <div key={index} className="space-y-4 p-4 border rounded-lg">
               <div className="flex justify-between items-center">
@@ -272,12 +279,18 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
                     userId={userId}
                     documentKey={`${userId}/experience_${index}`}
                     onSuccess={() => {
-                      setSuccessMessage(`Experiencia ${index + 1} eliminada correctamente`)
-                      setTimeout(() => setSuccessMessage(null), 3000)
+                      toast({
+                        variant: "success",
+                        title: "Éxito",
+                        description: `Experiencia ${index + 1} eliminada correctamente`,
+                      })
                     }}
                     onError={(error) => {
-                      setError(`Error al eliminar: ${error.message}`)
-                      setTimeout(() => setError(null), 3000)
+                      toast({
+                        variant: "destructive",
+                        title: "Error",
+                        description: `Error al eliminar: ${error.message}`,
+                      })
                     }}
                   />
                 )}
@@ -287,24 +300,24 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
                 <div className="space-y-2">
                   <ValidatedInput
                     id={`company-${index}`}
-                    label="Empresa *"
+                    label="Empresa"
                     value={item.company}
                     onChange={(e) => handleItemChange(index, "company", e.target.value)}
                     validationRules={[validationRules.required, validationRules.text]}
                     sanitizer="text"
-                    required
+                    required={true}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <ValidatedInput
                     id={`position-${index}`}
-                    label="Cargo *"
+                    label="Cargo"
                     value={item.position}
                     onChange={(e) => handleItemChange(index, "position", e.target.value)}
                     validationRules={[validationRules.required, validationRules.text]}
                     sanitizer="text"
-                    required
+                    required={true}
                   />
                 </div>
               </div>

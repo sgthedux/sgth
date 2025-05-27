@@ -171,7 +171,7 @@ export function DocumentUpload({
     }
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0]
 
@@ -206,7 +206,142 @@ export function DocumentUpload({
       setFile(selectedFile)
       setFileType(selectedFile.type)
       setError(null)
+
+      // Subir automáticamente después de seleccionar el archivo
+      await handleUploadWithFile(selectedFile)
     }
+  }
+
+  const handleUploadWithFile = async (fileToUpload: File) => {
+    if (!fileToUpload) {
+      setError("Por favor, selecciona un archivo primero.")
+      return
+    }
+
+    if (!actualCategory) {
+      setError("La categoría del documento es requerida.")
+      return
+    }
+
+    setUploading(true)
+    setProgress(0)
+    setError(null)
+
+    try {
+      // Simular progreso inicial
+      const progressInterval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 30) {
+            clearInterval(progressInterval)
+            return prev
+          }
+          return prev + 5
+        })
+      }, 200)
+
+      try {
+        // Generar un nombre único para el archivo que incluya la categoría y el itemId
+        const fileExt = fileToUpload.name.split(".").pop()
+
+        // Esquema de carpetas consistente que evita colisiones
+        const uniqueFileName = `${userId}/${actualCategory}/${itemId}_${Date.now()}.${fileExt}`
+        console.log("Subiendo archivo con nombre único:", uniqueFileName)
+
+        // Crear un FormData para enviar el archivo directamente
+        const formData = new FormData()
+        formData.append("file", fileToUpload)
+        formData.append("userId", userId)
+        formData.append("category", actualCategory)
+        formData.append("itemId", itemId)
+        formData.append("fileName", uniqueFileName) // Usar el nombre único generado
+        formData.append("contentType", fileToUpload.type)
+
+        // Enviar el archivo
+        const response = await fetch("/api/upload-direct", {
+          method: "POST",
+          body: formData,
+        })
+
+        if (!response.ok) {
+          let errorMessage = "Error al subir el archivo"
+          try {
+            const errorData = await response.json()
+            errorMessage = errorData.error || errorMessage
+          } catch (e) {
+            // Si no es JSON válido, intentar obtener el texto
+            try {
+              const errorText = await response.text()
+              errorMessage = errorText || errorMessage
+            } catch (e2) {
+              // Si todo falla, usar el mensaje genérico
+            }
+          }
+          throw new Error(errorMessage)
+        }
+
+        // Intentar analizar la respuesta como JSON
+        let uploadResult
+        try {
+          uploadResult = await response.json()
+        } catch (e) {
+          throw new Error("Error al analizar la respuesta del servidor")
+        }
+
+        const { url, key, fileName, public_url } = uploadResult
+        console.log("Respuesta de la API:", { url, key, fileName, public_url })
+
+        // Actualizar progreso
+        setProgress(70)
+
+        // Crear URL pública correctamente
+        const publicUrlValue = public_url || (key ? `${R2_PUBLIC_URL}/${key}` : null)
+        console.log("URL pública generada:", publicUrlValue)
+        setPublicUrl(publicUrlValue)
+
+        // Actualizar el caché con el nuevo documento
+        documentCache.set(cacheKey, {
+          name: fileName || fileToUpload.name,
+          url: url,
+          storage_path: key,
+        })
+
+        clearInterval(progressInterval)
+        setProgress(100)
+        setUploadedUrl(url)
+        setDocumentName(fileName || fileToUpload.name)
+        setFileType(fileToUpload.type)
+        setStoragePath(key)
+        setFile(null)
+        setDocumentLoaded(true)
+        setAutoLoadFailed(false)
+
+        // Resetear el input de archivo
+        const fileInput = document.getElementById(`file-upload-${actualCategory}`) as HTMLInputElement
+        if (fileInput) fileInput.value = ""
+
+        // Notificar que la carga fue exitosa
+        if (onUploadSuccess) {
+          onUploadSuccess()
+        }
+      } catch (error: any) {
+        console.error("Error al subir el documento:", error)
+        setError(error.message || "Error al subir el documento")
+      }
+    } catch (error: any) {
+      console.error("Error al subir el documento:", error)
+      setError(error.message || "Error al subir el documento")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleUpload = async () => {
+    if (!file) {
+      setError("Por favor, selecciona un archivo primero.")
+      return
+    }
+
+    await handleUploadWithFile(file)
   }
 
   // Modificar la función loadDocumentData para evitar la recursión infinita
@@ -328,129 +463,6 @@ export function DocumentUpload({
     } finally {
       setLoadingDocument(false)
       setLoading(false)
-    }
-  }
-
-  const handleUpload = async () => {
-    if (!file) {
-      setError("Por favor, selecciona un archivo primero.")
-      return
-    }
-
-    if (!actualCategory) {
-      setError("La categoría del documento es requerida.")
-      return
-    }
-
-    setUploading(true)
-    setProgress(0)
-    setError(null)
-
-    try {
-      // Simular progreso inicial
-      const progressInterval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 30) {
-            clearInterval(progressInterval)
-            return prev
-          }
-          return prev + 5
-        })
-      }, 200)
-
-      try {
-        // Generar un nombre único para el archivo que incluya la categoría y el itemId
-        const fileExt = file.name.split(".").pop()
-
-        // Esquema de carpetas consistente que evita colisiones
-        const uniqueFileName = `${userId}/${actualCategory}/${itemId}_${Date.now()}.${fileExt}`
-        console.log("Subiendo archivo con nombre único:", uniqueFileName)
-
-        // Crear un FormData para enviar el archivo directamente
-        const formData = new FormData()
-        formData.append("file", file)
-        formData.append("userId", userId)
-        formData.append("category", actualCategory)
-        formData.append("itemId", itemId)
-        formData.append("fileName", uniqueFileName) // Usar el nombre único generado
-        formData.append("contentType", file.type)
-
-        // Enviar el archivo
-        const response = await fetch("/api/upload-direct", {
-          method: "POST",
-          body: formData,
-        })
-
-        if (!response.ok) {
-          let errorMessage = "Error al subir el archivo"
-          try {
-            const errorData = await response.json()
-            errorMessage = errorData.error || errorMessage
-          } catch (e) {
-            // Si no es JSON válido, intentar obtener el texto
-            try {
-              const errorText = await response.text()
-              errorMessage = errorText || errorMessage
-            } catch (e2) {
-              // Si todo falla, usar el mensaje genérico
-            }
-          }
-          throw new Error(errorMessage)
-        }
-
-        // Intentar analizar la respuesta como JSON
-        let uploadResult
-        try {
-          uploadResult = await response.json()
-        } catch (e) {
-          throw new Error("Error al analizar la respuesta del servidor")
-        }
-
-        const { url, key, fileName, public_url } = uploadResult
-        console.log("Respuesta de la API:", { url, key, fileName, public_url })
-
-        // Actualizar progreso
-        setProgress(70)
-
-        // Crear URL pública correctamente
-        const publicUrlValue = public_url || (key ? `${R2_PUBLIC_URL}/${key}` : null)
-        console.log("URL pública generada:", publicUrlValue)
-        setPublicUrl(publicUrlValue)
-
-        // Actualizar el caché con el nuevo documento
-        documentCache.set(cacheKey, {
-          name: fileName || file.name,
-          url: url,
-          storage_path: key,
-        })
-
-        clearInterval(progressInterval)
-        setProgress(100)
-        setUploadedUrl(url)
-        setDocumentName(fileName || file.name)
-        setFileType(file.type)
-        setStoragePath(key)
-        setFile(null)
-        setDocumentLoaded(true)
-        setAutoLoadFailed(false)
-
-        // Resetear el input de archivo
-        const fileInput = document.getElementById(`file-upload-${actualCategory}`) as HTMLInputElement
-        if (fileInput) fileInput.value = ""
-
-        // Notificar que la carga fue exitosa
-        if (onUploadSuccess) {
-          onUploadSuccess()
-        }
-      } catch (error: any) {
-        console.error("Error al subir el documento:", error)
-        setError(error.message || "Error al subir el documento")
-      }
-    } catch (error: any) {
-      console.error("Error al subir el documento:", error)
-      setError(error.message || "Error al subir el documento")
-    } finally {
-      setUploading(false)
     }
   }
 
@@ -830,24 +842,16 @@ export function DocumentUpload({
               }}
             >
               <Upload className="h-4 w-4 mr-2 text-blue-500" />
-              {file ? file.name : "Seleccionar archivo"}
+              {uploading ? "Subiendo..." : file ? file.name : "Seleccionar archivo"}
             </Button>
           </div>
-
-          <Button
-            onClick={handleUpload}
-            disabled={!file || uploading}
-            size="sm"
-            className="bg-green-600 hover:bg-green-700"
-          >
-            {uploading ? "Subiendo..." : "Subir"}
-          </Button>
         </div>
 
         {uploading && <Progress value={progress} className="h-2" />}
 
         <p className="text-xs text-muted-foreground">
-          Formatos permitidos: PDF, PNG, JPG, CSV, XLS, XLSX | Tamaño máximo: 5MB
+          Formatos permitidos: PDF, PNG, JPG, CSV, XLS, XLSX | Tamaño máximo: 5MB | El archivo se subirá automáticamente
+          al seleccionarlo
         </p>
       </div>
 
