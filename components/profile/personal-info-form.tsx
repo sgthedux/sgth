@@ -18,6 +18,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Separator } from "@/components/ui/separator"
 import { DatePicker } from "@/components/date-picker"
 import { validationRules } from "@/lib/validations"
+import { useUser } from "@/hooks/use-user"
 
 interface Props {
   userId: string
@@ -55,7 +56,9 @@ interface Props {
 }
 
 export function PersonalInfoForm({ userId, initialData }: Props) {
+  const { user } = useUser()
   const [loading, setLoading] = useState(false)
+  const [loadingData, setLoadingData] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("identification")
   const [documentTypes, setDocumentTypes] = useState<any[]>([])
@@ -104,7 +107,6 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
   const handleValidationChange = React.useCallback(
     (field: string) => (isValid: boolean, error: string | null) => {
       setValidationErrors((prev) => {
-        // Solo actualizar si realmente cambió
         if (prev[field] !== error) {
           return {
             ...prev,
@@ -139,95 +141,101 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
     return hasRequiredFields && !hasValidationErrors
   }, [firstSurname, firstName, identificationType, identificationNumber, validationErrors])
 
+  // Cargar datos existentes del usuario usando la API
+  useEffect(() => {
+    const loadExistingData = async () => {
+      if (!user?.id) return
+
+      try {
+        setLoadingData(true)
+        console.log("Cargando datos existentes para usuario:", user.id)
+
+        // Llamar a la API para obtener datos de información personal
+        const response = await fetch(`/api/profile-data?userId=${user.id}&type=personal_info`)
+
+        if (!response.ok) {
+          throw new Error(`Error ${response.status}: ${response.statusText}`)
+        }
+
+        const result = await response.json()
+        console.log("Respuesta de la API:", result)
+
+        if (result.data) {
+          const personalInfo = result.data
+          console.log("Datos de información personal:", personalInfo)
+
+          // Cargar datos existentes en el formulario
+          setFirstSurname(personalInfo.first_surname || "")
+          setSecondSurname(personalInfo.second_surname || "")
+          setFirstName(personalInfo.first_name || "")
+          setMiddleName(personalInfo.middle_name || "")
+          setIdentificationType(personalInfo.identification_type || "")
+          setIdentificationNumber(personalInfo.identification_number || "")
+          setDocumentIssueDate(personalInfo.document_issue_date || "")
+          setDocumentIssuePlace(personalInfo.document_issue_place || "")
+          setGender(personalInfo.gender || "")
+          setMaritalStatus(personalInfo.marital_status || "")
+          setNationality(personalInfo.nationality || "")
+          setCountry(personalInfo.country || "")
+          setMilitaryBookletType(personalInfo.military_booklet_type || "")
+          setMilitaryBookletNumber(personalInfo.military_booklet_number || "")
+          setMilitaryDistrict(personalInfo.military_district || "")
+          setBirthDate(personalInfo.birth_date || "")
+          setBirthCountry(personalInfo.birth_country || "")
+          setBirthState(personalInfo.birth_state || "")
+          setBirthCity(personalInfo.birth_city || "")
+          setBirthMunicipality(personalInfo.birth_municipality || "")
+          setAddress(personalInfo.address || "")
+          setInstitutionalAddress(personalInfo.institutional_address || "")
+          setPhone(personalInfo.phone || "")
+          setEmail(personalInfo.email || "")
+          setInstitutionalEmail(personalInfo.institutional_email || "")
+          setResidenceCountry(personalInfo.residence_country || "")
+          setResidenceState(personalInfo.residence_state || "")
+          setResidenceCity(personalInfo.residence_city || "")
+          setResidenceMunicipality(personalInfo.residence_municipality || "")
+
+          console.log("Datos cargados exitosamente en el formulario")
+        } else {
+          console.log("No se encontraron datos existentes, formulario vacío")
+        }
+      } catch (error) {
+        console.error("Error cargando datos existentes:", error)
+        setError("Error al cargar los datos existentes")
+      } finally {
+        setLoadingData(false)
+      }
+    }
+
+    loadExistingData()
+  }, [user?.id])
+
   // Cargar catálogos
   useEffect(() => {
     const loadCatalogs = async () => {
       try {
-        // Cargar tipos de documento
-        const { data: docTypes, error: docTypesError } = await supabase
-          .from("document_types")
-          .select("id, name")
-          .order("name")
+        // Usar valores por defecto para los catálogos
+        setDocumentTypes([
+          { id: "CC", name: "Cédula de Ciudadanía" },
+          { id: "CE", name: "Cédula de Extranjería" },
+          { id: "PAS", name: "Pasaporte" },
+          { id: "TI", name: "Tarjeta de Identidad" },
+        ])
 
-        if (docTypesError) {
-          console.error("Error al cargar tipos de documento:", docTypesError)
-          setDocumentTypes([
-            { id: "CC", name: "Cédula de Ciudadanía" },
-            { id: "CE", name: "Cédula de Extranjería" },
-            { id: "PAS", name: "Pasaporte" },
-            { id: "TI", name: "Tarjeta de Identidad" },
-          ])
-        } else {
-          setDocumentTypes(docTypes || [])
-        }
-
-        // Cargar estados civiles
-        const { data: maritalStatuses, error: maritalStatusError } = await supabase
-          .from("marital_status")
-          .select("id, name")
-          .order("name")
-
-        if (maritalStatusError) {
-          console.error("Error al cargar estados civiles:", maritalStatusError)
-          setMaritalStatusOptions([
-            { id: "S", name: "Soltero/a" },
-            { id: "C", name: "Casado/a" },
-            { id: "U", name: "Unión Libre" },
-            { id: "D", name: "Divorciado/a" },
-            { id: "V", name: "Viudo/a" },
-          ])
-        } else {
-          setMaritalStatusOptions(maritalStatuses || [])
-        }
+        setMaritalStatusOptions([
+          { id: "S", name: "Soltero/a" },
+          { id: "C", name: "Casado/a" },
+          { id: "U", name: "Unión Libre" },
+          { id: "D", name: "Divorciado/a" },
+          { id: "V", name: "Viudo/a" },
+        ])
       } catch (error) {
         console.error("Error al cargar catálogos:", error)
       }
     }
 
     loadCatalogs()
-  }, [supabase])
-
-  // Cargar datos iniciales cuando el componente se monta o cuando initialData cambia
-  useEffect(() => {
-    if (initialData) {
-      console.log("Cargando datos iniciales:", initialData)
-
-      // Identification data
-      setFirstSurname(initialData.first_surname || "")
-      setSecondSurname(initialData.second_surname || "")
-      setFirstName(initialData.first_name || "")
-      setMiddleName(initialData.middle_name || "")
-      setIdentificationType(initialData.identification_type || "")
-      setIdentificationNumber(initialData.identification_number || "")
-      setDocumentIssueDate(initialData.document_issue_date || "")
-      setDocumentIssuePlace(initialData.document_issue_place || "")
-      setGender(initialData.gender || "")
-      setMaritalStatus(initialData.marital_status || "")
-      setNationality(initialData.nationality || "")
-      setCountry(initialData.country || "")
-
-      // Military service data
-      setMilitaryBookletType(initialData.military_booklet_type || "")
-      setMilitaryBookletNumber(initialData.military_booklet_number || "")
-      setMilitaryDistrict(initialData.military_district || "")
-
-      // Birth and contact data
-      setBirthDate(initialData.birth_date || "")
-      setBirthCountry(initialData.birth_country || "")
-      setBirthState(initialData.birth_state || "")
-      setBirthCity(initialData.birth_city || "")
-      setBirthMunicipality(initialData.birth_municipality || "")
-      setAddress(initialData.address || "")
-      setInstitutionalAddress(initialData.institutional_address || "")
-      setPhone(initialData.phone || "")
-      setEmail(initialData.email || "")
-      setInstitutionalEmail(initialData.institutional_email || "")
-      setResidenceCountry(initialData.residence_country || "")
-      setResidenceState(initialData.residence_state || "")
-      setResidenceCity(initialData.residence_city || "")
-      setResidenceMunicipality(initialData.residence_municipality || "")
-    }
-  }, [initialData])
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -241,16 +249,6 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
     setError(null)
 
     try {
-      const { data: existingData, error: fetchError } = await supabase
-        .from("personal_info")
-        .select("*")
-        .eq("user_id", userId)
-        .maybeSingle()
-
-      if (fetchError && !fetchError.message.includes("No rows found")) {
-        throw fetchError
-      }
-
       const personalInfoData = {
         user_id: userId,
         first_surname: firstSurname,
@@ -284,6 +282,17 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
         residence_municipality: residenceMunicipality,
       }
 
+      // Verificar si ya existe información personal
+      const { data: existingData, error: fetchError } = await supabase
+        .from("personal_info")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle()
+
+      if (fetchError && !fetchError.message.includes("No rows found")) {
+        throw fetchError
+      }
+
       let error
 
       if (existingData) {
@@ -301,12 +310,17 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
 
       if (error) throw error
 
+      // Actualizar el perfil para marcar como completado
       const { error: profileError } = await supabase
         .from("profiles")
         .update({ personal_info_completed: true })
         .eq("id", userId)
 
       if (profileError) throw profileError
+
+      // Mostrar mensaje de éxito
+      setError(null)
+      alert("Información personal guardada correctamente")
 
       router.refresh()
     } catch (error: any) {
@@ -324,6 +338,21 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
   const prevTab = () => {
     if (activeTab === "contact") setActiveTab("military")
     else if (activeTab === "military") setActiveTab("identification")
+  }
+
+  // Mostrar indicador de carga mientras se cargan los datos
+  if (loadingData) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Datos Personales</CardTitle>
+          <CardDescription>Cargando información existente...</CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center p-6">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
@@ -408,20 +437,11 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                       <SelectValue placeholder="Seleccione un tipo" />
                     </SelectTrigger>
                     <SelectContent>
-                      {documentTypes.length > 0 ? (
-                        documentTypes.map((type) => (
-                          <SelectItem key={type.id} value={type.id}>
-                            {type.name}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <>
-                          <SelectItem value="CC">Cédula de Ciudadanía (CC)</SelectItem>
-                          <SelectItem value="CE">Cédula de Extranjería (CE)</SelectItem>
-                          <SelectItem value="PAS">Pasaporte (PAS)</SelectItem>
-                          <SelectItem value="TI">Tarjeta de Identidad (TI)</SelectItem>
-                        </>
-                      )}
+                      {documentTypes.map((type) => (
+                        <SelectItem key={type.id} value={type.id}>
+                          {type.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -496,21 +516,11 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                       <SelectValue placeholder="Seleccione estado civil" />
                     </SelectTrigger>
                     <SelectContent>
-                      {maritalStatusOptions.length > 0 ? (
-                        maritalStatusOptions.map((status) => (
-                          <SelectItem key={status.id} value={status.id}>
-                            {status.name}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <>
-                          <SelectItem value="S">Soltero/a</SelectItem>
-                          <SelectItem value="C">Casado/a</SelectItem>
-                          <SelectItem value="U">Unión Libre</SelectItem>
-                          <SelectItem value="D">Divorciado/a</SelectItem>
-                          <SelectItem value="V">Viudo/a</SelectItem>
-                        </>
-                      )}
+                      {maritalStatusOptions.map((status) => (
+                        <SelectItem key={status.id} value={status.id}>
+                          {status.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

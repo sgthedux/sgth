@@ -46,6 +46,7 @@ interface EducationFormProps {
 export function EducationForm({ userId, educations = [] }: EducationFormProps) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("basic")
+  const [loadingData, setLoadingData] = useState(true)
   const [items, setItems] = useState(
     educations.length > 0
       ? educations
@@ -77,6 +78,41 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [academicModalities, setAcademicModalities] = useState<any[]>([])
   const supabase = createClient()
+
+  // Cargar datos existentes del usuario
+  useEffect(() => {
+    const loadExistingData = async () => {
+      try {
+        setLoadingData(true)
+        console.log("Cargando educación existente para usuario:", userId)
+
+        const response = await fetch(`/api/profile-data?type=education&userId=${userId}`)
+        if (!response.ok) {
+          throw new Error(`Error HTTP: ${response.status}`)
+        }
+
+        const data = await response.json()
+        console.log("Respuesta de educación:", data)
+
+        if (data.success && data.data && data.data.length > 0) {
+          setItems(data.data)
+          console.log("Datos de educación cargados exitosamente:", data.data.length, "registros")
+        } else {
+          console.log("No se encontró educación existente")
+          // Mantener el elemento vacío por defecto
+        }
+      } catch (error) {
+        console.error("Error cargando educación existente:", error)
+        setError("Error al cargar los datos existentes")
+      } finally {
+        setLoadingData(false)
+      }
+    }
+
+    if (userId) {
+      loadExistingData()
+    }
+  }, [userId])
 
   // Cargar catálogos
   useEffect(() => {
@@ -218,6 +254,21 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
 
   const basicEducationItems = items.filter((item) => item.education_type === "basic")
   const higherEducationItems = items.filter((item) => item.education_type === "higher")
+
+  // Mostrar indicador de carga mientras se cargan los datos
+  if (loadingData) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Formación Académica</CardTitle>
+          <CardDescription>Cargando información existente...</CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center p-6">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card>

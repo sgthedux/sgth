@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label"
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -41,6 +41,7 @@ interface ExperienceFormProps {
 
 export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps) {
   const router = useRouter()
+  const [loadingData, setLoadingData] = useState(true)
   const [items, setItems] = useState(
     experiences.length > 0
       ? experiences
@@ -67,6 +68,41 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const supabase = createClient()
+
+  // Cargar datos existentes del usuario
+  useEffect(() => {
+    const loadExistingData = async () => {
+      try {
+        setLoadingData(true)
+        console.log("Cargando experiencia existente para usuario:", userId)
+
+        const response = await fetch(`/api/profile-data?type=experience&userId=${userId}`)
+        if (!response.ok) {
+          throw new Error(`Error HTTP: ${response.status}`)
+        }
+
+        const data = await response.json()
+        console.log("Respuesta de experiencia:", data)
+
+        if (data.success && data.data && data.data.length > 0) {
+          setItems(data.data)
+          console.log("Datos de experiencia cargados exitosamente:", data.data.length, "registros")
+        } else {
+          console.log("No se encontró experiencia existente")
+          // Mantener el elemento vacío por defecto
+        }
+      } catch (error) {
+        console.error("Error cargando experiencia existente:", error)
+        setError("Error al cargar los datos existentes")
+      } finally {
+        setLoadingData(false)
+      }
+    }
+
+    if (userId) {
+      loadExistingData()
+    }
+  }, [userId])
 
   const handleAddItem = () => {
     setItems([
@@ -183,6 +219,21 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
     } finally {
       setLoading(false)
     }
+  }
+
+  // Mostrar indicador de carga mientras se cargan los datos
+  if (loadingData) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Experiencia Laboral</CardTitle>
+          <CardDescription>Cargando información existente...</CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center p-6">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (

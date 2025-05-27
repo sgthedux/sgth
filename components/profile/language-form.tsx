@@ -67,38 +67,26 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
-  const [retryCount, setRetryCount] = useState(0)
+  const [loadingData, setLoadingData] = useState(true)
 
   // Cargar los idiomas al iniciar
   useEffect(() => {
     const loadLanguages = async () => {
       try {
-        setLoading(true)
+        setLoadingData(true)
+        console.log("Cargando idiomas existentes para usuario:", userId)
 
-        // Crear un nuevo cliente Supabase para cada operación
-        const supabase = createClient()
-
-        // Usar la función de reintento para manejar errores temporales
-        const { data, error } = await retryOperation(
-          async () => {
-            return await supabase
-              .from("languages")
-              .select("*")
-              .eq("user_id", userId)
-              .order("created_at", { ascending: true })
-          },
-          3,
-          1000,
-        )
-
-        if (error) {
-          console.error("Error de Supabase al cargar idiomas:", error)
-          throw error
+        const response = await fetch(`/api/profile-data?type=languages&userId=${userId}`)
+        if (!response.ok) {
+          throw new Error(`Error HTTP: ${response.status}`)
         }
 
-        if (data && data.length > 0) {
+        const data = await response.json()
+        console.log("Respuesta de idiomas:", data)
+
+        if (data.success && data.data && data.data.length > 0) {
           setItems(
-            data.map((lang) => ({
+            data.data.map((lang: any) => ({
               id: lang.id || "",
               language: lang.language || "",
               speaking_level: lang.speaking_level || "",
@@ -106,6 +94,7 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
               writing_level: lang.writing_level || "",
             })),
           )
+          console.log("Datos de idiomas cargados exitosamente:", data.data.length, "registros")
         } else {
           // Si no hay idiomas, inicializar con un elemento vacío
           setItems([
@@ -117,38 +106,31 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
               writing_level: "",
             },
           ])
+          console.log("No se encontraron idiomas existentes, formulario vacío")
         }
       } catch (error: any) {
         console.error("Error al cargar idiomas:", error)
-
-        // Manejar específicamente errores de rate limiting
-        if (error.message && error.message.includes("Too Many")) {
-          setError("Demasiadas solicitudes. Por favor, espere un momento y recargue la página.")
-
-          // Incrementar contador de reintentos y programar un nuevo intento
-          const newRetryCount = retryCount + 1
-          setRetryCount(newRetryCount)
-
-          if (newRetryCount <= 3) {
-            setTimeout(
-              () => {
-                setError(`Reintentando cargar datos (intento ${newRetryCount})...`)
-                loadLanguages()
-              },
-              2000 * Math.pow(2, newRetryCount - 1),
-            )
-          }
-        } else {
-          setError("Error al cargar los idiomas. Por favor, recargue la página.")
-        }
+        setError("Error al cargar los idiomas existentes")
+        // En caso de error, inicializar con elemento vacío
+        setItems([
+          {
+            id: "",
+            language: "",
+            speaking_level: "",
+            reading_level: "",
+            writing_level: "",
+          },
+        ])
       } finally {
-        setLoading(false)
+        setLoadingData(false)
         setIsInitialized(true)
       }
     }
 
-    loadLanguages()
-  }, [userId, retryCount])
+    if (userId) {
+      loadLanguages()
+    }
+  }, [userId])
 
   const handleAddItem = () => {
     setItems([
@@ -282,7 +264,7 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
   ]
 
   // Mostrar un indicador de carga mientras se inicializa
-  if (!isInitialized) {
+  if (!isInitialized || loadingData) {
     return (
       <Card>
         <CardHeader>
