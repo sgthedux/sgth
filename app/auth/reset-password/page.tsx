@@ -24,13 +24,60 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     const checkSession = async () => {
-      const { data } = await supabase.auth.getSession()
-      if (data.session) {
-        setIsAuthenticated(true)
-      } else {
-        setError(
-          "No se ha podido verificar tu identidad. Por favor, intenta nuevamente desde el enlace enviado a tu correo.",
-        )
+      try {
+        // Primero verificar si ya hay una sesión activa
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+
+        if (sessionError) {
+          console.error("Error getting session:", sessionError)
+        }
+
+        if (sessionData.session) {
+          setIsAuthenticated(true)
+          return
+        }
+
+        // Verificar si hay un código de recuperación en la URL
+        const urlParams = new URLSearchParams(window.location.search)
+        const code = urlParams.get("code")
+
+        if (code) {
+          // Intercambiar el código por una sesión
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+
+          if (error) {
+            console.error("Error exchanging code for session:", error)
+            setError("El enlace de recuperación no es válido o ha expirado. Por favor, solicita uno nuevo.")
+          } else if (data.session) {
+            setIsAuthenticated(true)
+          }
+        } else {
+          // Verificar si hay tokens en el hash (formato alternativo)
+          const hashParams = new URLSearchParams(window.location.hash.substring(1))
+          const accessToken = hashParams.get("access_token")
+          const refreshToken = hashParams.get("refresh_token")
+
+          if (accessToken && refreshToken) {
+            const { error: setSessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            })
+
+            if (setSessionError) {
+              console.error("Error setting session:", setSessionError)
+              setError("El enlace de recuperación no es válido o ha expirado. Por favor, solicita uno nuevo.")
+            } else {
+              setIsAuthenticated(true)
+            }
+          } else {
+            setError(
+              "No se ha podido verificar tu identidad. Por favor, intenta nuevamente desde el enlace enviado a tu correo.",
+            )
+          }
+        }
+      } catch (error) {
+        console.error("Error in checkSession:", error)
+        setError("Error al verificar la sesión. Por favor, intenta nuevamente.")
       }
     }
 
@@ -64,11 +111,12 @@ export default function ResetPasswordPage() {
         throw error
       }
 
-      setSuccess("Contraseña actualizada correctamente")
+      setSuccess("Contraseña actualizada correctamente. Serás redirigido al inicio de sesión.")
 
-      // Redirigir después de 2 segundos
-      setTimeout(() => {
-        router.push("/dashboard")
+      // Cerrar sesión y redirigir al login después de 2 segundos
+      setTimeout(async () => {
+        await supabase.auth.signOut()
+        router.push("/auth/login")
       }, 2000)
     } catch (error: any) {
       console.error("Error al actualizar contraseña:", error)

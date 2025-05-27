@@ -33,7 +33,8 @@ export default function ForgotPasswordPage() {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
+        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/auth/reset-password`,
+        captchaToken: undefined, // Asegurar que no hay conflictos con captcha
       })
 
       if (error) {
@@ -41,11 +42,24 @@ export default function ForgotPasswordPage() {
       }
 
       setSuccess(
-        "Se ha enviado un enlace de recuperación a tu correo electrónico. Por favor revisa tu bandeja de entrada.",
+        "Se ha enviado un enlace de recuperación a tu correo electrónico. El enlace será válido por 1 hora. Si no recibes el correo, revisa tu carpeta de spam.",
       )
     } catch (error: any) {
       console.error("Error al solicitar recuperación de contraseña:", error)
-      setError(error.message || "Error al solicitar recuperación de contraseña")
+
+      let errorMessage = "Error al solicitar recuperación de contraseña"
+
+      if (error.message?.includes("Email not confirmed")) {
+        errorMessage = "Tu cuenta no ha sido confirmada. Por favor verifica tu correo electrónico primero."
+      } else if (error.message?.includes("Invalid email")) {
+        errorMessage = "El correo electrónico no es válido."
+      } else if (error.message?.includes("User not found")) {
+        errorMessage = "No existe una cuenta asociada a este correo electrónico."
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
