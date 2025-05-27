@@ -1,19 +1,21 @@
 "use client"
 
+import { Label } from "@/components/ui/label"
+
 import type React from "react"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertCircle, Plus } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Input } from "@/components/ui/input"
 import { DocumentUpload } from "@/components/profile/document-upload"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { DeleteConfirmation } from "@/components/delete-confirmation"
+import { ValidatedInput } from "@/components/ui/validated-input"
+import { validationRules } from "@/lib/validations"
 
 interface LanguageFormProps {
   userId: string
@@ -49,7 +51,6 @@ async function retryOperation<T>(operation: () => Promise<T>, maxRetries = 3, in
   throw lastError
 }
 
-// Modificar la función LanguageForm para incluir el guardado automático
 export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
   const router = useRouter()
   const [items, setItems] = useState<
@@ -67,10 +68,6 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
-  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const lastSavedDataRef = useRef<any>(null)
 
   // Cargar los idiomas al iniciar
   useEffect(() => {
@@ -153,134 +150,6 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
     loadLanguages()
   }, [userId, retryCount])
 
-  // Función para obtener los datos actuales del formulario
-  const getCurrentFormData = useCallback(() => {
-    return items.map((item) => ({
-      user_id: userId,
-      language: item.language,
-      speaking_level: item.speaking_level,
-      reading_level: item.reading_level,
-      writing_level: item.writing_level,
-      id: item.id,
-    }))
-  }, [items, userId])
-
-  // Función para guardar automáticamente
-  const autoSave = useCallback(async () => {
-    if (!userId || !isInitialized || items.length === 0) return
-
-    const currentData = getCurrentFormData()
-
-    // Verificar si hay cambios comparando con los últimos datos guardados
-    if (lastSavedDataRef.current && JSON.stringify(lastSavedDataRef.current) === JSON.stringify(currentData)) {
-      return // No hay cambios, no es necesario guardar
-    }
-
-    setAutoSaveStatus("saving")
-
-    try {
-      // Crear un nuevo cliente Supabase para cada operación
-      const supabase = createClient()
-
-      // Verificar si hay elementos incompletos
-      const incompleteItems = items.filter(
-        (item) => !item.language || !item.speaking_level || !item.reading_level || !item.writing_level,
-      )
-
-      if (incompleteItems.length > 0) {
-        // Si hay elementos incompletos, no guardar automáticamente
-        setAutoSaveStatus("idle")
-        setHasUnsavedChanges(true)
-        return
-      }
-
-      // Eliminar todos los idiomas existentes para este usuario con reintentos
-      const { error: deleteError } = await retryOperation(async () => {
-        return await supabase.from("languages").delete().eq("user_id", userId)
-      })
-
-      if (deleteError) throw deleteError
-
-      // Insertar los nuevos idiomas con reintentos
-      const languageData = items.map((item) => ({
-        user_id: userId,
-        language: item.language,
-        speaking_level: item.speaking_level,
-        reading_level: item.reading_level,
-        writing_level: item.writing_level,
-      }))
-
-      const { error: insertError } = await retryOperation(async () => {
-        return await supabase.from("languages").insert(languageData)
-      })
-
-      if (insertError) throw insertError
-
-      // Actualizar el estado del perfil con reintentos
-      const { error: profileError } = await retryOperation(async () => {
-        return await supabase.from("profiles").update({ languages_completed: true }).eq("id", userId)
-      })
-
-      if (profileError) throw profileError
-
-      // Actualizar referencia de datos guardados
-      lastSavedDataRef.current = [...currentData]
-      setHasUnsavedChanges(false)
-      setAutoSaveStatus("saved")
-
-      // Mostrar mensaje de éxito brevemente
-      setSuccessMessage("Idiomas guardados automáticamente")
-      setTimeout(() => {
-        setSuccessMessage(null)
-        setAutoSaveStatus("idle")
-      }, 3000)
-    } catch (error: any) {
-      console.error("Error en autoguardado:", error)
-      setAutoSaveStatus("error")
-      setError(`Error al guardar automáticamente: ${error.message}`)
-      setTimeout(() => {
-        setError(null)
-      }, 5000)
-    }
-  }, [getCurrentFormData, isInitialized, items, userId])
-
-  // Configurar el guardado automático cuando cambian los datos
-  useEffect(() => {
-    if (!isInitialized) return
-
-    // Marcar que hay cambios sin guardar
-    if (lastSavedDataRef.current) {
-      setHasUnsavedChanges(true)
-    }
-
-    // Limpiar el timeout anterior si existe
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current)
-    }
-
-    // Configurar un nuevo timeout para guardar después de 3 segundos de inactividad
-    autoSaveTimeoutRef.current = setTimeout(() => {
-      if (hasUnsavedChanges) {
-        autoSave()
-      }
-    }, 3000)
-
-    // Limpiar el timeout cuando el componente se desmonte
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current)
-      }
-    }
-  }, [items, isInitialized, autoSave, hasUnsavedChanges])
-
-  // Guardar los datos iniciales cuando se cargan
-  useEffect(() => {
-    if (isInitialized && items.length > 0) {
-      // Guardar los datos iniciales como referencia
-      lastSavedDataRef.current = getCurrentFormData()
-    }
-  }, [isInitialized, items, getCurrentFormData])
-
   const handleAddItem = () => {
     setItems([
       ...items,
@@ -298,7 +167,6 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
     const newItems = [...items]
     newItems[index] = { ...newItems[index], [field]: value }
     setItems(newItems)
-    setHasUnsavedChanges(true)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -350,10 +218,6 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
       if (profileError) throw profileError
 
       setSuccessMessage("Idiomas guardados correctamente")
-
-      // Actualizar referencia de datos guardados después de guardar manualmente
-      lastSavedDataRef.current = getCurrentFormData()
-      setHasUnsavedChanges(false)
 
       // Refrescar la página después de un breve retraso
       setTimeout(() => {
@@ -417,25 +281,6 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
     { value: "MB", label: "Muy Bueno (MB)" },
   ]
 
-  // Renderizar indicador de estado de guardado automático
-  const renderAutoSaveStatus = () => {
-    switch (autoSaveStatus) {
-      case "saving":
-        return (
-          <div className="text-xs text-blue-600 flex items-center">
-            <div className="animate-spin mr-1 h-3 w-3 border-2 border-blue-600 rounded-full border-t-transparent"></div>
-            Guardando...
-          </div>
-        )
-      case "saved":
-        return <div className="text-xs text-green-600">Guardado automático completado</div>
-      case "error":
-        return <div className="text-xs text-red-600">Error al guardar automáticamente</div>
-      default:
-        return hasUnsavedChanges ? <div className="text-xs text-amber-600">Cambios sin guardar</div> : null
-    }
-  }
-
   // Mostrar un indicador de carga mientras se inicializa
   if (!isInitialized) {
     return (
@@ -456,13 +301,8 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex justify-between items-center">
-          <div>
-            <CardTitle>Idiomas</CardTitle>
-            <CardDescription>Agregue los idiomas que conoce y su nivel de dominio</CardDescription>
-          </div>
-          {renderAutoSaveStatus()}
-        </div>
+        <CardTitle>Idiomas</CardTitle>
+        <CardDescription>Agregue los idiomas que conoce y su nivel de dominio</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-6">
@@ -507,11 +347,13 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor={`language-${index}`}>Idioma *</Label>
-                <Input
+                <ValidatedInput
                   id={`language-${index}`}
+                  label="Idioma *"
                   value={item.language}
                   onChange={(e) => handleItemChange(index, "language", e.target.value)}
+                  validationRules={[validationRules.required, validationRules.name]}
+                  sanitizer="name"
                   required
                   disabled={loading || item.isDeleting}
                 />

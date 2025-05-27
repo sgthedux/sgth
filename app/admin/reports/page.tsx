@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button"
 import { FileSpreadsheet, FileText, Download, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
+import * as XLSX from "xlsx"
 
 // Interfaces para tipado
 interface DocumentType {
@@ -229,6 +228,56 @@ const DOCENTES_SNIES_MAPPING = {
     const date = new Date(ctx.education.start_date)
     return date.toISOString().split("T")[0]
   },
+}
+
+const downloadXLSX = (data: any[], fileName: string) => {
+  try {
+    // Crear un nuevo workbook
+    const workbook = XLSX.utils.book_new()
+
+    // Crear una hoja de trabajo con los datos
+    const worksheet = XLSX.utils.json_to_sheet(data)
+
+    // Configurar el ancho de las columnas automáticamente
+    const columnWidths = Object.keys(data[0] || {}).map((key) => ({
+      wch: Math.max(key.length, 15), // Ancho mínimo de 15 caracteres
+    }))
+    worksheet["!cols"] = columnWidths
+
+    // Agregar la hoja al workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte")
+
+    // Generar el buffer del archivo
+    const excelBuffer = XLSX.write(workbook, {
+      bookType: "xlsx",
+      type: "array",
+      compression: true,
+    })
+
+    // Crear blob y descargar
+    const blob = new Blob([excelBuffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    })
+
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.setAttribute("href", url)
+    link.setAttribute("download", fileName)
+    link.style.visibility = "hidden"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    // Liberar recursos
+    setTimeout(() => {
+      URL.revokeObjectURL(url)
+    }, 100)
+
+    console.log(`Archivo XLSX descargado: ${fileName}`)
+  } catch (error) {
+    console.error("Error al generar archivo XLSX:", error)
+    throw new Error("Error al generar el archivo Excel")
+  }
 }
 
 export default function ReportsPage() {
@@ -559,23 +608,12 @@ export default function ReportsPage() {
         throw new Error("No hay datos para generar el reporte")
       }
 
-      const headers = [...Object.keys(PARTICIPANTES_SNIES_MAPPING), "AÑO", "SEMESTRE"].join(",")
-      const rows = reportData.map((row) => {
-        const allColumns = [...Object.keys(PARTICIPANTES_SNIES_MAPPING), "AÑO", "SEMESTRE"]
-        return allColumns
-          .map((key) => {
-            const value = row[key]
-            return typeof value === "string" ? `"${value.replace(/"/g, '""')}"` : value || ""
-          })
-          .join(",")
-      })
-      const csv = [headers, ...rows].join("\n")
-
-      console.log(`CSV generado con ${rows.length} filas y ${headers.split(",").length} columnas`)
+      // Los datos ya están en formato correcto para XLSX
+      console.log(`XLSX generado con ${reportData.length} filas`)
 
       const periodYear = reportPeriod?.year || currentYear
       const periodSemester = reportPeriod?.semester || currentSemester
-      downloadCSV(csv, `Participante_SNIES_${periodYear}_${periodSemester}.csv`)
+      downloadXLSX(reportData, `Participante_SNIES_${periodYear}_${periodSemester}.xlsx`)
     } catch (err: any) {
       console.error("Error al generar reporte de participantes:", err)
       setError(`Error al generar reporte de participantes: ${err.message}`)
@@ -677,22 +715,11 @@ export default function ReportsPage() {
         throw new Error("No hay datos para generar el reporte")
       }
 
-      const headers = Object.keys(DOCENTES_SNIES_MAPPING).join(",")
-      const rows = reportData.map((row) =>
-        Object.keys(DOCENTES_SNIES_MAPPING)
-          .map((key) => {
-            const value = row[key]
-            return typeof value === "string" ? `"${value.replace(/"/g, '""')}"` : value || ""
-          })
-          .join(","),
-      )
-      const csv = [headers, ...rows].join("\n")
-
-      console.log(`CSV generado con ${rows.length} filas y ${headers.split(",").length} columnas`)
+      console.log(`XLSX generado con ${reportData.length} filas`)
 
       const periodYear = reportPeriodOuter?.year || currentYear
       const periodSemester = reportPeriodOuter?.semester || currentSemester
-      downloadCSV(csv, `Docentes_IES_SNIES_${periodYear}_${periodSemester}.csv`)
+      downloadXLSX(reportData, `Docentes_IES_SNIES_${periodYear}_${periodSemester}.xlsx`)
     } catch (err: any) {
       console.error("Error al generar reporte de docentes:", err)
       setError(`Error al generar reporte de docentes: ${err.message}`)
@@ -750,7 +777,7 @@ export default function ReportsPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Reportes</h1>
         <p className="text-muted-foreground">Genera reportes del sistema</p>
-      </div>    
+      </div>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>

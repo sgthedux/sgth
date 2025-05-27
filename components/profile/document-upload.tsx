@@ -175,6 +175,28 @@ export function DocumentUpload({
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0]
 
+      // Validar formato de archivo
+      const allowedFormats = [
+        "application/pdf",
+        "image/png",
+        "image/jpeg",
+        "image/jpg",
+        "text/csv",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ]
+
+      const allowedExtensions = [".pdf", ".png", ".jpg", ".jpeg", ".csv", ".xls", ".xlsx"]
+
+      const fileExtension = selectedFile.name.toLowerCase().substring(selectedFile.name.lastIndexOf("."))
+      const isValidFormat = allowedFormats.includes(selectedFile.type) || allowedExtensions.includes(fileExtension)
+
+      if (!isValidFormat) {
+        setError("Formato de archivo no permitido. Solo se aceptan archivos PDF, PNG, JPG, CSV, XLS y XLSX.")
+        e.target.value = "" // Limpiar el input
+        return
+      }
+
       // Validar tamaño (máximo 5MB)
       if (selectedFile.size > 5 * 1024 * 1024) {
         setError("El archivo es demasiado grande. El tamaño máximo es 5MB.")
@@ -824,7 +846,9 @@ export function DocumentUpload({
 
         {uploading && <Progress value={progress} className="h-2" />}
 
-        <p className="text-xs text-muted-foreground">Tamaño máximo: 5MB</p>
+        <p className="text-xs text-muted-foreground">
+          Formatos permitidos: PDF, PNG, JPG, CSV, XLS, XLSX | Tamaño máximo: 5MB
+        </p>
       </div>
 
       {/* Diálogo para visualizar documentos */}

@@ -2,31 +2,22 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { AlertCircle, Plus, Save } from "lucide-react"
+import { AlertCircle, Plus } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DocumentUpload } from "@/components/profile/document-upload"
 import { DatePicker } from "@/components/date-picker"
 import { DeleteConfirmation } from "@/components/delete-confirmation"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+import { ValidatedInput } from "@/components/ui/validated-input"
+import { validationRules } from "@/lib/validations"
 
 interface EducationFormProps {
   userId: string
@@ -86,15 +77,6 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [academicModalities, setAcademicModalities] = useState<any[]>([])
   const supabase = createClient()
-
-  // Estados para el guardado automático
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
-  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
-  const [pendingTabChange, setPendingTabChange] = useState<string | null>(null)
-  const originalItemsRef = useRef<typeof items>([])
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Cargar catálogos
   useEffect(() => {
@@ -162,107 +144,13 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
     const newItems = [...items]
     newItems[index] = { ...newItems[index], [field]: value }
     setItems(newItems)
-    setHasUnsavedChanges(true)
-
-    // Iniciar el guardado automático después de un tiempo de inactividad
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current)
-    }
-    saveTimeoutRef.current = setTimeout(() => {
-      autoSave(newItems)
-    }, 2000) // Guardar después de 2 segundos de inactividad
   }
-
-  // Función para guardar automáticamente
-  const autoSave = useCallback(
-    async (dataToSave = items) => {
-      // No guardar si no hay cambios
-      if (!hasUnsavedChanges) return
-
-      setIsSaving(true)
-      setSaveStatus("saving")
-
-      try {
-        // Delete existing education records
-        if (educations.length > 0) {
-          const { error: deleteError } = await supabase.from("education").delete().eq("user_id", userId)
-          if (deleteError) throw deleteError
-        }
-
-        // Insert new education records
-        const educationData = dataToSave.map((item) => {
-          // Asegurarse de que los campos de fecha sean null si están vacíos
-          const graduation_date = item.graduation_date || null
-          const start_date = item.start_date || null
-          const end_date = item.current ? null : item.end_date || null
-
-          return {
-            user_id: userId,
-            education_type: item.education_type,
-            institution: item.institution,
-            degree: item.degree,
-            field_of_study: item.field_of_study,
-            level: item.level,
-            graduation_date,
-            start_date,
-            end_date,
-            current: item.current,
-            semesters_completed: item.semesters_completed,
-            graduated: item.graduated,
-            professional_card_number: item.professional_card_number,
-            description: item.description,
-            institution_country: item.institution_country,
-            title_validated: item.title_validated,
-            ies_code: item.ies_code,
-            academic_modality: item.academic_modality,
-          }
-        })
-
-        const { data: insertedEducations, error: insertError } = await supabase
-          .from("education")
-          .insert(educationData)
-          .select()
-
-        if (insertError) throw insertError
-
-        // Update profile status
-        const { error: profileError } = await supabase
-          .from("profiles")
-          .update({ education_completed: true })
-          .eq("id", userId)
-
-        if (profileError) throw profileError
-
-        // Actualizar el estado después de guardar
-        setHasUnsavedChanges(false)
-        setSaveStatus("saved")
-        originalItemsRef.current = JSON.parse(JSON.stringify(dataToSave))
-
-        // Mostrar mensaje de éxito brevemente
-        setSuccessMessage("Información educativa guardada automáticamente")
-        setTimeout(() => {
-          setSuccessMessage(null)
-        }, 3000)
-      } catch (error: any) {
-        console.error("Error al guardar automáticamente:", error)
-        setSaveStatus("error")
-        setError(`Error al guardar: ${error.message}`)
-        setTimeout(() => {
-          setError(null)
-        }, 3000)
-      } finally {
-        setIsSaving(false)
-      }
-    },
-    [hasUnsavedChanges, items, educations.length, supabase, userId],
-  )
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
     setSuccessMessage(null)
-    setSaveStatus("saving")
 
     try {
       // Delete existing education records
@@ -316,9 +204,6 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
       if (profileError) throw profileError
 
       setSuccessMessage("Información educativa guardada correctamente")
-      setHasUnsavedChanges(false)
-      setSaveStatus("saved")
-      originalItemsRef.current = JSON.parse(JSON.stringify(items))
 
       // Esperar un momento antes de refrescar para que el usuario vea el mensaje de éxito
       setTimeout(() => {
@@ -326,38 +211,10 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
       }, 1500)
     } catch (error: any) {
       setError(error.message || "Error al guardar la información educativa")
-      setSaveStatus("error")
     } finally {
       setLoading(false)
     }
   }
-
-  const handleTabChange = (value: string) => {
-    if (hasUnsavedChanges) {
-      setPendingTabChange(value)
-      setShowUnsavedDialog(true)
-    } else {
-      setActiveTab(value)
-    }
-  }
-
-  const confirmTabChange = () => {
-    if (pendingTabChange) {
-      setActiveTab(pendingTabChange)
-      setPendingTabChange(null)
-    }
-    setShowUnsavedDialog(false)
-  }
-
-  const saveAndContinue = async () => {
-    await autoSave()
-    confirmTabChange()
-  }
-
-  // Inicializar el estado original para comparar cambios
-  useEffect(() => {
-    originalItemsRef.current = JSON.parse(JSON.stringify(items))
-  }, [])
 
   const basicEducationItems = items.filter((item) => item.education_type === "basic")
   const higherEducationItems = items.filter((item) => item.education_type === "higher")
@@ -365,33 +222,8 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex justify-between items-center">
-          <div>
-            <CardTitle>Formación Académica</CardTitle>
-            <CardDescription>Agregue su información educativa completa</CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            {hasUnsavedChanges && <span className="text-amber-600 text-sm font-medium">Cambios sin guardar</span>}
-            {saveStatus === "saving" && (
-              <span className="text-blue-600 text-sm font-medium flex items-center">
-                <Save className="h-3 w-3 mr-1 animate-pulse" />
-                Guardando...
-              </span>
-            )}
-            {saveStatus === "saved" && (
-              <span className="text-green-600 text-sm font-medium flex items-center">
-                <Save className="h-3 w-3 mr-1" />
-                Guardado
-              </span>
-            )}
-            {saveStatus === "error" && (
-              <span className="text-red-600 text-sm font-medium flex items-center">
-                <AlertCircle className="h-3 w-3 mr-1" />
-                Error al guardar
-              </span>
-            )}
-          </div>
-        </div>
+        <CardTitle>Formación Académica</CardTitle>
+        <CardDescription>Agregue su información educativa completa</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-6">
@@ -408,7 +240,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
             </Alert>
           )}
 
-          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid grid-cols-2 mb-4">
               <TabsTrigger value="basic">Educación Básica y Media</TabsTrigger>
               <TabsTrigger value="higher">Educación Superior</TabsTrigger>
@@ -486,21 +318,25 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
 
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div className="space-y-2">
-                        <Label htmlFor={`institution-${index}`}>Institución Educativa</Label>
-                        <Input
+                        <ValidatedInput
                           id={`institution-${index}`}
+                          label="Institución Educativa *"
                           value={item.institution}
                           onChange={(e) => handleItemChange(itemIndex, "institution", e.target.value)}
+                          validationRules={[validationRules.required, validationRules.text]}
+                          sanitizer="text"
                           required
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor={`degree-${index}`}>Título Obtenido</Label>
-                        <Input
+                        <ValidatedInput
                           id={`degree-${index}`}
+                          label="Título Obtenido *"
                           value={item.degree}
                           onChange={(e) => handleItemChange(itemIndex, "degree", e.target.value)}
+                          validationRules={[validationRules.required, validationRules.text]}
+                          sanitizer="text"
                           required
                         />
                       </div>
@@ -508,11 +344,13 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
 
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div className="space-y-2">
-                        <Label htmlFor={`institution-country-${index}`}>País de la Institución</Label>
-                        <Input
+                        <ValidatedInput
                           id={`institution-country-${index}`}
+                          label="País de la Institución *"
                           value={item.institution_country || "Colombia"}
                           onChange={(e) => handleItemChange(itemIndex, "institution_country", e.target.value)}
+                          validationRules={[validationRules.required, validationRules.name]}
+                          sanitizer="name"
                           required
                         />
                       </div>
@@ -585,21 +423,26 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
 
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div className="space-y-2">
-                        <Label htmlFor={`institution-higher-${index}`}>Institución Educativa</Label>
-                        <Input
+                        <ValidatedInput
                           id={`institution-higher-${index}`}
+                          label="Institución Educativa *"
                           value={item.institution}
                           onChange={(e) => handleItemChange(itemIndex, "institution", e.target.value)}
+                          validationRules={[validationRules.required, validationRules.text]}
+                          sanitizer="text"
                           required
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor={`ies-code-${index}`}>Código SNIES de la Institución</Label>
-                        <Input
+                        <ValidatedInput
                           id={`ies-code-${index}`}
+                          label="Código SNIES de la Institución"
                           value={item.ies_code || ""}
                           onChange={(e) => handleItemChange(itemIndex, "ies_code", e.target.value)}
+                          validationRules={[validationRules.numbers]}
+                          sanitizer="numbers"
+                          type="number"
                           placeholder="Ej: 1101"
                         />
                       </div>
@@ -607,11 +450,13 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
 
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div className="space-y-2">
-                        <Label htmlFor={`institution-country-${index}`}>País de la Institución</Label>
-                        <Input
+                        <ValidatedInput
                           id={`institution-country-${index}`}
+                          label="País de la Institución *"
                           value={item.institution_country || "Colombia"}
                           onChange={(e) => handleItemChange(itemIndex, "institution_country", e.target.value)}
+                          validationRules={[validationRules.required, validationRules.name]}
+                          sanitizer="name"
                           required
                         />
                       </div>
@@ -670,9 +515,9 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor={`semesters-${index}`}>Número de Semestres Aprobados</Label>
-                        <Input
+                        <ValidatedInput
                           id={`semesters-${index}`}
+                          label="Número de Semestres Aprobados *"
                           type="number"
                           min="0"
                           max="20"
@@ -680,6 +525,8 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                           onChange={(e) =>
                             handleItemChange(itemIndex, "semesters_completed", Number.parseInt(e.target.value))
                           }
+                          validationRules={[validationRules.required, validationRules.numbers]}
+                          sanitizer="numbers"
                           required
                         />
                       </div>
@@ -713,21 +560,25 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
 
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div className="space-y-2">
-                        <Label htmlFor={`degree-higher-${index}`}>Título Obtenido</Label>
-                        <Input
+                        <ValidatedInput
                           id={`degree-higher-${index}`}
+                          label="Título Obtenido *"
                           value={item.degree}
                           onChange={(e) => handleItemChange(itemIndex, "degree", e.target.value)}
+                          validationRules={[validationRules.required, validationRules.text]}
+                          sanitizer="text"
                           required
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor={`field-${index}`}>Área de Estudio</Label>
-                        <Input
+                        <ValidatedInput
                           id={`field-${index}`}
+                          label="Área de Estudio *"
                           value={item.field_of_study}
                           onChange={(e) => handleItemChange(itemIndex, "field_of_study", e.target.value)}
+                          validationRules={[validationRules.required, validationRules.text]}
+                          sanitizer="text"
                           required
                         />
                       </div>
@@ -755,11 +606,13 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
 
                     {item.graduated && (
                       <div className="space-y-2">
-                        <Label htmlFor={`professional-card-${index}`}>Número de Tarjeta Profesional (si aplica)</Label>
-                        <Input
+                        <ValidatedInput
                           id={`professional-card-${index}`}
+                          label="Número de Tarjeta Profesional (si aplica)"
                           value={item.professional_card_number || ""}
                           onChange={(e) => handleItemChange(itemIndex, "professional_card_number", e.target.value)}
+                          validationRules={[validationRules.alphanumeric]}
+                          sanitizer="alphanumeric"
                         />
                       </div>
                     )}
@@ -793,22 +646,6 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
           </Tabs>
         </CardContent>
       </form>
-      {/* Diálogo de confirmación para cambios sin guardar */}
-      <AlertDialog open={showUnsavedDialog} onOpenChange={setShowUnsavedDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cambios sin guardar</AlertDialogTitle>
-            <AlertDialogDescription>Tienes cambios sin guardar. ¿Qué deseas hacer?</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setShowUnsavedDialog(false)}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={saveAndContinue} className="bg-green-600 hover:bg-green-700">
-              Guardar y continuar
-            </AlertDialogAction>
-            <AlertDialogAction onClick={confirmTabChange}>Continuar sin guardar</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </Card>
   )
 }
