@@ -1,47 +1,45 @@
-import { createServerClient } from "@supabase/ssr"
+import { createServerClient, type CookieOptions } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
 export async function createClient() {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
 
-  return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl) {
+    console.error("Supabase URL no está definida en las variables de entorno del servidor.")
+    throw new Error("Supabase URL no está definida en las variables de entorno del servidor.")
+  }
+  if (!supabaseServiceRoleKey) {
+    console.error("Supabase Service Role Key no está definida en las variables de entorno del servidor.")
+    throw new Error("Supabase Service Role Key no está definida en las variables de entorno del servidor.")
+  }
+
+  return createServerClient(supabaseUrl, supabaseServiceRoleKey, {
     cookies: {
-      get(name) {
+      get(name: string) {
         return cookieStore.get(name)?.value
       },
-      set(name, value, options) {
-        cookieStore.set({ name, value, ...options })
+      set(name: string, value: string, options: CookieOptions) {
+        try {
+          cookieStore.set({ name, value, ...options })
+        } catch (error) {
+          // Ignorar errores si se llama desde un Server Component sin middleware de refresco
+          console.warn(`[Supabase Server Client] Error en cookie set (ignorado): ${name}`, error)
+        }
       },
-      remove(name, options) {
-        cookieStore.set({ name, value: "", ...options })
+      remove(name: string, options: CookieOptions) {
+        try {
+          cookieStore.set({ name, value: "", ...options })
+        } catch (error) {
+          // Ignorar errores si se llama desde un Server Component sin middleware de refresco
+          console.warn(`[Supabase Server Client] Error en cookie remove (ignorado): ${name}`, error)
+        }
       },
     },
     auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-    },
-  })
-}
-
-// Función para crear un cliente con la clave de servicio
-export async function createServiceClient() {
-  const cookieStore = cookies()
-
-  return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-    cookies: {
-      get(name) {
-        return cookieStore.get(name)?.value
-      },
-      set(name, value, options) {
-        cookieStore.set({ name, value, ...options })
-      },
-      remove(name, options) {
-        cookieStore.set({ name, value: "", ...options })
-      },
-    },
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
+      persistSession: false, // Para API routes, no persistir sesión en cookies
     },
   })
 }

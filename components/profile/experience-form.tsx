@@ -4,22 +4,26 @@ import { Label } from "@/components/ui/label"
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus } from "lucide-react"
+import { AlertCircle, Plus } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Textarea } from "@/components/ui/textarea"
 import { DocumentUpload } from "@/components/profile/document-upload"
+import { AutoDocumentUpload } from "@/components/profile/auto-document-upload"
 import { DatePicker } from "@/components/date-picker"
 import { DeleteConfirmation } from "@/components/delete-confirmation"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ValidatedInput } from "@/components/ui/validated-input"
 import { validationRules } from "@/lib/validations"
 import { useUser } from "@/hooks/use-user"
-
-import { useToast } from "@/components/ui/use-toast"
+import { secureDB } from "@/lib/supabase/secure-client"
+import { useFormCache } from "@/hooks/use-form-cache"
+import { useDBData } from "@/hooks/use-db-data"
+import { notifications } from "@/lib/notifications"
 
 interface ExperienceFormProps {
   userId: string
@@ -44,76 +48,61 @@ interface ExperienceFormProps {
 export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps) {
   const router = useRouter()
   const { user } = useUser()
-  const [loadingData, setLoadingData] = useState(true)
-  const [items, setItems] = useState(
-    experiences.length > 0
-      ? experiences
-      : [
-          {
-            id: "",
-            company: "",
-            position: "",
-            start_date: "",
-            end_date: null,
-            current: false,
-            description: "",
-            sector: "private",
-            state: "",
-            city: "",
-            company_email: "",
-            company_phone: "",
-            company_address: "",
-            department: "",
-          },
-        ],
-  )
-  const [loading, setLoading] = useState(false)
-  const { toast } = useToast()
-
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
 
-  // Cargar datos existentes del usuario
+  // Configuración inicial de datos memoizada
+  const initialData = useMemo(() => [{
+    id: "",
+    company: "",
+    position: "",
+    start_date: "",
+    end_date: null,
+    current: false,
+    description: "",
+    sector: "private",
+    state: "",
+    city: "",
+    company_email: "",
+    company_phone: "",
+    company_address: "",
+    department: "",
+  }], [])
+
+  // Cache local de datos del formulario
+  const {
+    data: items,
+    updateData: setItems,
+    isDirty,
+    clearCache
+  } = useFormCache(initialData, {
+    formKey: 'experience',
+    userId,
+    autoSave: true
+  })
+
+  // Carga automática de datos desde la base de datos
+  const {
+    data: dbExperiences,
+    loading: loadingData,
+    error: dbError,
+    refetch: refetchExperiences
+  } = useDBData<any>({
+    userId,
+    table: 'experience',
+    enabled: !!userId
+  })
+
+  // Cargar datos existentes cuando estén disponibles
   useEffect(() => {
-    const loadExistingData = async () => {
-      if (!user?.id) return
-
-      try {
-        setLoadingData(true)
-        console.log("Cargando experiencia existente para usuario:", user.id)
-
-        const { data: existingExperience, error: existingExperienceError } = await supabase
-          .from("experience")
-          .select("*")
-          .eq("user_id", user.id);
-
-        if (existingExperienceError) {
-          console.error("Error fetching existing experience:", existingExperienceError)
-          // Handle error appropriately
-        } else if (existingExperience && existingExperience.length > 0) {
-          setItems(existingExperience)
-          console.log("Datos de experiencia cargados exitosamente")
-        } else {
-          console.log("No se encontró experiencia existente")
-        }
-      } catch (error) {
-        console.error("Error cargando experiencia existente:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Error al cargar los datos existentes",
-        })
-      } finally {
-        setLoadingData(false)
-      }
+    if (dbExperiences && dbExperiences.length > 0 && items.length === 1 && !items[0].company) {
+      setItems(dbExperiences)
     }
+  }, [dbExperiences, items, setItems])
 
-    loadExistingData()
-  }, [user?.id])
+  const [loading, setLoading] = useState(false)
 
   const handleAddItem = () => {
-    setItems([
+    const newItems = [
       ...items,
       {
         id: "",
@@ -131,7 +120,8 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
         company_address: "",
         department: "",
       },
-    ])
+    ]
+    setItems(newItems)
   }
 
   const handleRemoveItem = async (index: number) => {
@@ -141,18 +131,10 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
       newItems.splice(index, 1)
       setItems(newItems)
 
-      toast({
-        variant: "success",
-        title: "Éxito",
-        description: `Experiencia ${index + 1} eliminada correctamente`,
-      })
+      notifications.success.delete(`Experiencia ${index + 1}`)
     } catch (error) {
       console.error("Error al eliminar la experiencia:", error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Error al eliminar la experiencia. Inténtelo de nuevo.",
-      })
+      notifications.error.delete("la experiencia")
     }
   }
 
@@ -176,22 +158,49 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Prevenir múltiples envíos
+    if (loading) return
+    
     setLoading(true)
 
     try {
-      // Delete existing experience records
-      if (experiences.length > 0) {
-        const { error: deleteError } = await supabase.from("experience").delete().eq("user_id", userId)
-        if (deleteError) throw deleteError
+      // Validar que no haya campos obligatorios vacíos
+      const invalidItems = items.filter(item => 
+        !item.company.trim() || 
+        !item.position.trim() || 
+        !item.start_date
+      )
+      
+      if (invalidItems.length > 0) {
+        notifications.error.validation("Por favor complete todos los campos obligatorios: empresa, cargo y fecha de inicio")
+        setLoading(false)
+        return
       }
 
-      // Insert new experience records
+      // Obtener experiencias existentes para comparar
+      const { data: existingExperiences, error: fetchError } = await supabase
+        .from("experience")
+        .select("*")
+        .eq("user_id", userId)
+
+      if (fetchError) throw fetchError
+
+      // Preparar datos para upsert
       const experienceData = items.map((item) => {
+        // Buscar si ya existe una experiencia similar
+        const existingItem = existingExperiences?.find(existing => 
+          existing.company === item.company &&
+          existing.position === item.position &&
+          existing.start_date === item.start_date
+        )
+
         // Asegurarse de que los campos de fecha sean null si están vacíos
         const start_date = item.start_date || null
         const end_date = item.current ? null : item.end_date || null
 
         return {
+          id: existingItem?.id || item.id || undefined, // Usar ID existente si lo hay
           user_id: userId,
           company: item.company,
           position: item.position,
@@ -209,8 +218,58 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
         }
       })
 
-      const { error: insertError } = await supabase.from("experience").insert(experienceData)
-      if (insertError) throw insertError
+      // Filtrar elementos duplicados basado en empresa, posición y fecha de inicio
+      const uniqueExperienceData = experienceData.filter((item, index, self) => 
+        index === self.findIndex(t => 
+          t.company === item.company && 
+          t.position === item.position && 
+          t.start_date === item.start_date
+        )
+      )
+
+      // Primero, eliminar experiencias que ya no están en la lista
+      const currentIds = uniqueExperienceData.map(item => item.id).filter(Boolean)
+      const existingIds = existingExperiences?.map(item => item.id) || []
+      const idsToDelete = existingIds.filter(id => !currentIds.includes(id))
+
+      if (idsToDelete.length > 0) {
+        const { error: deleteError } = await supabase
+          .from("experience")
+          .delete()
+          .in("id", idsToDelete)
+        
+        if (deleteError) throw deleteError
+      }
+
+      console.log("=== DEBUG EXPERIENCE SAVE ===")
+      console.log("userId:", userId)
+      console.log("items:", items)
+      console.log("items type:", typeof items)
+      console.log("items isArray:", Array.isArray(items))
+      console.log("experienceData:", experienceData)
+      console.log("uniqueExperienceData:", uniqueExperienceData)
+      console.log("=== END DEBUG ===")
+
+      // Manejar el upsert de forma más robusta
+      for (const expData of uniqueExperienceData) {
+        if (expData.id) {
+          // Actualizar experiencia existente
+          const { error } = await supabase
+            .from("experience")
+            .update(expData)
+            .eq("id", expData.id)
+          
+          if (error) throw error
+        } else {
+          // Insertar nueva experiencia
+          const { id, ...insertData } = expData
+          const { error } = await supabase
+            .from("experience")
+            .insert(insertData)
+          
+          if (error) throw error
+        }
+      }
 
       // Update profile status
       const { error: profileError } = await supabase
@@ -220,22 +279,35 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
 
       if (profileError) throw profileError
 
-      toast({
-        variant: "success",
-        title: "Éxito",
-        description: "Experiencia laboral guardada correctamente",
-      })
+      // Limpiar cache después de guardar exitosamente
+      clearCache()
+      
+      // Refrescar datos de la base de datos
+      refetchExperiences()
+      
+      notifications.success.save("Experiencia laboral")
 
       // Esperar un momento antes de refrescar para que el usuario vea el mensaje de éxito
       setTimeout(() => {
         router.refresh()
       }, 1500)
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Error al guardar la experiencia laboral",
-      })
+      console.error("Error al guardar experiencia:", error)
+      
+      // Mostrar mensaje de error más amigable
+      let errorMessage = "Ocurrió un error inesperado al guardar la experiencia laboral"
+      
+      if (error.message?.includes("duplicate key")) {
+        errorMessage = "Ya existe un registro de experiencia similar"
+      } else if (error.message?.includes("network") || error.message?.includes("fetch")) {
+        errorMessage = "Error de conexión. Verifica tu internet e intenta nuevamente"
+      } else if (error.message?.includes("unauthorized") || error.message?.includes("permission")) {
+        errorMessage = "No tienes permisos para realizar esta acción"
+      } else if (error.message?.includes("column") || error.message?.includes("schema")) {
+        errorMessage = "Error en el sistema. Por favor contacta al administrador"
+      }
+      
+      notifications.error.generic(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -279,18 +351,10 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
                     userId={userId}
                     documentKey={`${userId}/experience_${index}`}
                     onSuccess={() => {
-                      toast({
-                        variant: "success",
-                        title: "Éxito",
-                        description: `Experiencia ${index + 1} eliminada correctamente`,
-                      })
+                      notifications.success.delete(`Experiencia ${index + 1}`)
                     }}
                     onError={(error) => {
-                      toast({
-                        variant: "destructive",
-                        title: "Error",
-                        description: `Error al eliminar: ${error.message}`,
-                      })
+                      notifications.error.delete("experiencia laboral", error.message)
                     }}
                   />
                 )}
@@ -305,7 +369,7 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
                     onChange={(e) => handleItemChange(index, "company", e.target.value)}
                     validationRules={[validationRules.required, validationRules.text]}
                     sanitizer="text"
-                    required={true}
+                    required
                   />
                 </div>
 
@@ -317,7 +381,7 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
                     onChange={(e) => handleItemChange(index, "position", e.target.value)}
                     validationRules={[validationRules.required, validationRules.text]}
                     sanitizer="text"
-                    required={true}
+                    required
                   />
                 </div>
               </div>
@@ -415,7 +479,7 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <DatePicker
                   id={`start-date-${index}`}
-                  label="Fecha de Inicio *"
+                  label="Fecha de Inicio"
                   value={item.start_date}
                   onChange={(date) => handleItemChange(index, "start_date", date)}
                   required
@@ -439,7 +503,7 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
                   {!item.current ? (
                     <DatePicker
                       id={`end-date-${index}`}
-                      label="Fecha de Finalización *"
+                      label="Fecha de Finalización"
                       value={item.end_date || ""}
                       onChange={(date) => handleItemChange(index, "end_date", date)}
                       required={true}
@@ -454,7 +518,10 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor={`description-${index}`}>Descripción de Funciones *</Label>
+                <Label htmlFor={`description-${index}`}>
+                  Descripción de Funciones
+                  <span className="text-red-500 ml-1">*</span>
+                </Label>
                 <Textarea
                   id={`description-${index}`}
                   value={item.description}
@@ -465,12 +532,19 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
               </div>
 
               <div className="space-y-4">
-                <Label>Documento de Soporte *</Label>
-                <DocumentUpload
+                <AutoDocumentUpload
                   userId={userId}
-                  documentType={`experience_${index}`}
-                  itemId={`experience_${index}`}
-                  label="Subir certificado laboral"
+                  documentType="experience_certificate"
+                  formType="experience"
+                  itemIndex={index}
+                  label="Documento de Soporte"
+                  required
+                  onUploadSuccess={(url) => {
+                    console.log("Documento subido exitosamente:", url)
+                  }}
+                  onUploadError={(error) => {
+                    console.error("Error al subir documento:", error)
+                  }}
                 />
               </div>
             </div>

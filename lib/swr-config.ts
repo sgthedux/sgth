@@ -3,9 +3,9 @@ import { SWRConfig } from "swr"
 
 // Configuración global de SWR
 export const SWRProvider = ({ children }: { children: React.ReactNode }) => {
-  return React.createElement(
-    SWRConfig,
-    { value: {
+  return (
+    <SWRConfig
+      value={{
         // Tiempo de revalidación: 5 minutos
         dedupingInterval: 300000,
         // Revalidar al enfocar la ventana: desactivado para reducir solicitudes
@@ -16,16 +16,21 @@ export const SWRProvider = ({ children }: { children: React.ReactNode }) => {
         errorRetryCount: 3,
         errorRetryInterval: 5000,
         // Función para manejar errores de rate limiting
-        onErrorRetry: (error, key, config, revalidate, { retryCount }) => {
+        onErrorRetry: (error: any, key: any, config: any, revalidate: any, { retryCount }: any) => {
+          // No reintentar en errores 429 (Too Many Requests)
           if (error.status === 429) {
-            setTimeout(() => revalidate({ retryCount }), 10000 * (retryCount + 1));
-            return;
+            // Esperar más tiempo antes de reintentar
+            setTimeout(() => revalidate({ retryCount }), 10000 * (retryCount + 1))
+            return
           }
-          if (retryCount >= 3) return;
-          setTimeout(() => revalidate({ retryCount }), 5000 * (retryCount + 1));
+
+          // Comportamiento predeterminado para otros errores
+          if (retryCount >= 3) return
+          setTimeout(() => revalidate({ retryCount }), 5000 * (retryCount + 1))
         },
-      }
-    },
-    children
+      }}
+    >
+      {children}
+    </SWRConfig>
   )
 }

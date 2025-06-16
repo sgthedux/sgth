@@ -1,7 +1,5 @@
 "use client"
 
-export const dynamic = 'force-dynamic'
-
 import type React from "react"
 import { useMemo, Suspense, useState, useEffect } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
@@ -17,35 +15,21 @@ import { SWRProvider } from "@/lib/swr-config"
 import { createClient } from "@/lib/supabase/client"
 import { useAllProfileData } from "@/hooks/use-profile"
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   return (
     <SWRProvider>
-      <Suspense fallback={<LoadingState message="Loading params..." />}>
-        <LayoutInner pathname={pathname} router={router}>
-          {children}
-        </LayoutInner>
-      </Suspense>
+      <DashboardContent pathname={pathname} router={router} searchParams={searchParams}>
+        {children}
+      </DashboardContent>
     </SWRProvider>
-  )
-}
-
-function LayoutInner({
-  pathname,
-  router,
-  children,
-}: {
-  pathname: string
-  router: any
-  children: React.ReactNode
-}) {
-  const searchParams = useSearchParams()
-  return (
-    <DashboardContent pathname={pathname} router={router} searchParams={searchParams}>
-      {children}
-    </DashboardContent>
   )
 }
 
@@ -70,13 +54,15 @@ function DashboardContent({
 
     const loadUser = async () => {
       try {
-        // Intentar obtener usuario del localStorage primero
-        const cachedUser = localStorage.getItem("currentUser")
-        if (cachedUser) {
-          const parsedUser = JSON.parse(cachedUser)
-          if (isMounted) {
-            setUser(parsedUser)
-            setLoading(false)
+        // Intentar obtener usuario del localStorage primero (solo en el cliente)
+        if (typeof window !== 'undefined') {
+          const cachedUser = localStorage.getItem("currentUser")
+          if (cachedUser) {
+            const parsedUser = JSON.parse(cachedUser)
+            if (isMounted) {
+              setUser(parsedUser)
+              setLoading(false)
+            }
           }
         }
 
@@ -98,8 +84,10 @@ function DashboardContent({
         if (isMounted) {
           setUser(session.user)
           setLoading(false)
-          // Guardar en localStorage
-          localStorage.setItem("currentUser", JSON.stringify(session.user))
+          // Guardar en localStorage (solo en el cliente)
+          if (typeof window !== 'undefined') {
+            localStorage.setItem("currentUser", JSON.stringify(session.user))
+          }
         }
       } catch (error) {
         console.error("Error in loadUser:", error)
@@ -133,12 +121,12 @@ function DashboardContent({
   }, [searchParams])
 
   // Mostrar estado de carga solo si no hay datos en caché
-  if (loading && !localStorage.getItem("currentUser")) {
+  if (loading && (typeof window === 'undefined' || !localStorage.getItem("currentUser"))) {
     return <LoadingState message="Cargando usuario..." />
   }
 
   // Usar datos en caché mientras se cargan los datos frescos
-  const profile = allProfileData?.profile || JSON.parse(localStorage.getItem(`profile/${user?.id}`) || "{}")
+  const profile = allProfileData?.profile || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem(`profile/${user?.id}`) || "{}") : {})
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -203,8 +191,11 @@ function ProfileContent({
     }
 
     try {
-      const cachedData = localStorage.getItem(`${key}/${userId}`)
-      return cachedData ? JSON.parse(cachedData) : key === "profile" ? {} : []
+      if (typeof window !== 'undefined') {
+        const cachedData = localStorage.getItem(`${key}/${userId}`)
+        return cachedData ? JSON.parse(cachedData) : key === "profile" ? {} : []
+      }
+      return key === "profile" ? {} : []
     } catch (e) {
       console.error(`Error getting ${key} from cache:`, e)
       return key === "profile" ? {} : []
@@ -220,15 +211,17 @@ function ProfileContent({
   // Mostrar indicador de carga solo si no hay datos en caché
   const showLoading =
     isLoading &&
-    !localStorage.getItem(`profile/${userId}`) &&
-    !localStorage.getItem(`personal_info/${userId}`) &&
-    !localStorage.getItem(`education/${userId}`) &&
-    !localStorage.getItem(`experience/${userId}`) &&
-    !localStorage.getItem(`languages/${userId}`)
+    (typeof window === 'undefined' || (
+      !localStorage.getItem(`profile/${userId}`) &&
+      !localStorage.getItem(`personal_info/${userId}`) &&
+      !localStorage.getItem(`education/${userId}`) &&
+      !localStorage.getItem(`experience/${userId}`) &&
+      !localStorage.getItem(`languages/${userId}`)
+    ))
 
   return (
     <div className="w-full max-w-full overflow-hidden">
-      {activeSection === "profile" && <ProfileNavigation activeTab={activeTab} userId={userId} />}
+      {activeSection === "profile" && <ProfileNavigation />}
 
       {/* Renderizado condicional del contenido */}
       {activeSection === "dashboard" && <div className="w-full max-w-full overflow-hidden">{children}</div>}

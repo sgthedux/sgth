@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { uploadToR2 } from "@/lib/r2-direct"
-import { cookies } from "next/headers"
+
+// Route segment config
+export const runtime = 'nodejs'
+export const maxDuration = 30
 
 export async function POST(request: Request) {
   try {
@@ -35,7 +38,6 @@ export async function POST(request: Request) {
       console.log("Archivo subido a R2, URL pública:", publicUrl)
 
       // Inicializar correctamente el cliente de Supabase
-      const cookieStore = cookies()
       const supabase = await createClient()
 
       // Primero, eliminar cualquier documento existente para evitar duplicados
@@ -98,9 +100,9 @@ export async function POST(request: Request) {
         fileName: file.name,
         public_url: publicUrl,
       })
-    } catch (uploadError) {
+    } catch (uploadError: any) {
       console.error("Error al subir archivo a R2:", uploadError)
-      throw new Error(`Error al subir archivo a R2: ${uploadError.message}`)
+      throw new Error(`Error al subir archivo a R2: ${uploadError.message || 'Error desconocido'}`)
     }
   } catch (error: any) {
     console.error("Error al subir archivo:", error)

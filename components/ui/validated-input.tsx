@@ -120,7 +120,7 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
           <Label
             htmlFor={props.id}
             className={cn(
-              "text-base font-semibold text-gray-700",
+              "text-base font-semibold text-foreground",
               props.required && "after:content-['*'] after:text-red-500 after:ml-1",
             )}
           >
@@ -129,7 +129,7 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
         )}
         <Input
           className={cn(
-            "border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm transition-colors",
+            "border-2 border-input bg-background rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-400 shadow-sm transition-colors text-foreground",
             showErrorMessage && "border-red-500 focus:border-red-500 focus:ring-red-200",
             className,
           )}

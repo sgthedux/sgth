@@ -1,27 +1,47 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js"
+import { createClient } from "@supabase/supabase-js"
 
-// Crear un cliente de Supabase con la clave de servicio para operaciones administrativas
-export function createAdminClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-  return createSupabaseClient(supabaseUrl, supabaseServiceKey, {
+// Cliente administrativo para operaciones que requieren permisos elevados
+export const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
     },
-  })
+  },
+)
+
+// Función para verificar si un usuario es admin
+export async function isUserAdmin(userId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabaseAdmin.from("profiles").select("role").eq("id", userId).single()
+
+    if (error) {
+      console.error("Error verificando rol de admin:", error)
+      return false
+    }
+
+    return data?.role === "admin"
+  } catch (error) {
+    console.error("Error en isUserAdmin:", error)
+    return false
+  }
 }
 
-// Función alternativa para crear un cliente de servicio (puede usarse según necesidades)
-export function createServiceClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+// Función para obtener perfil de usuario (para admins)
+export async function getProfileForAdmin(userId: string) {
+  try {
+    const { data, error } = await supabaseAdmin.from("profiles").select("*").eq("id", userId).single()
 
-  return createSupabaseClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
+    if (error) {
+      console.error("Error obteniendo perfil para admin:", error)
+      return null
+    }
+
+    return data
+  } catch (error) {
+    console.error("Error en getProfileForAdmin:", error)
+    return null
+  }
 }

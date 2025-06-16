@@ -532,12 +532,14 @@ export function DocumentsPreview({ userId }: DocumentsPreviewProps) {
                               <div className="h-40 overflow-hidden rounded-md bg-muted/20 flex items-center justify-center">
                                 {isImageUrl(uploadedDoc.url, uploadedDoc.type) ? (
                                   <img
-                                    src={uploadedDoc.calculatedPublicUrl || uploadedDoc.url || "/placeholder.svg"}
+                                    src={uploadedDoc.calculatedPublicUrl || uploadedDoc.url || "/placeholder.jpg"}
                                     alt={uploadedDoc.name}
+                                    width={400}
+                                    height={300}
                                     className="h-full w-full object-contain"
                                     onError={(e: any) => {
                                       e.target.onerror = null
-                                      e.target.src = "/placeholder.svg"
+                                      e.target.src = "/placeholder.jpg"
                                     }}
                                   />
                                 ) : isPdfUrl(uploadedDoc.url) ? (
@@ -603,13 +605,15 @@ export function DocumentsPreview({ userId }: DocumentsPreviewProps) {
                     <div className="h-40 overflow-hidden rounded-md bg-muted/20 flex items-center justify-center">
                       {isImageUrl(doc.url, doc.type) ? (
                         <img
-                          src={doc.calculatedPublicUrl || doc.url || "/placeholder.svg"}
+                          src={doc.calculatedPublicUrl || doc.url || "/placeholder.jpg"}
                           alt={doc.name}
+                          width={400}
+                          height={300}
                           className="h-full w-full object-contain"
                           onError={(e: any) => {
                             console.log("Error al cargar imagen:", doc.calculatedPublicUrl || doc.url)
                             e.target.onerror = null
-                            e.target.src = "/placeholder.svg"
+                            e.target.src = "/placeholder.jpg"
                           }}
                         />
                       ) : isPdfUrl(doc.url) ? (
@@ -667,8 +671,10 @@ export function DocumentsPreview({ userId }: DocumentsPreviewProps) {
             ) : isImageUrl(selectedDocument?.url, selectedDocument?.type) ? (
               <div className="w-full h-full flex items-center justify-center">
                 <img
-                  src={selectedDocument?.calculatedPublicUrl || selectedDocument?.url || "/placeholder.svg"}
+                  src={selectedDocument?.calculatedPublicUrl || selectedDocument?.url || "/placeholder.jpg"}
                   alt={selectedDocument?.name}
+                  width={800}
+                  height={600}
                   className="max-w-full max-h-full object-contain mx-auto"
                   onError={(e: any) => {
                     console.error(
@@ -676,7 +682,7 @@ export function DocumentsPreview({ userId }: DocumentsPreviewProps) {
                       selectedDocument?.calculatedPublicUrl || selectedDocument?.url,
                     )
                     e.target.onerror = null
-                    e.target.src = "/placeholder.svg"
+                    e.target.src = "/placeholder.jpg"
                   }}
                 />
               </div>

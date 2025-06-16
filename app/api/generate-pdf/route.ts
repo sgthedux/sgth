@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 import { generatePdf } from "@/lib/pdf-generator"
+import { createClient } from "@/lib/supabase/server"
 
 export async function POST(request: Request) {
   try {
@@ -12,19 +12,46 @@ export async function POST(request: Request) {
 
     console.log("Generando PDF para el usuario:", userId)
 
-    // Crear cliente de Supabase con el rol de servicio para tener permisos completos
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-      process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-    )
+    // Crear cliente de Supabase del servidor
+    const supabase = await createClient()
+    
+    // Verificar que el usuario esté autenticado
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      console.error("Usuario no autenticado:", authError)
+      return NextResponse.json({ error: "Usuario no autenticado" }, { status: 401 })
+    }
+    
+    // Verificar que el usuario pueda acceder a los datos (mismo usuario o admin)
+    if (user.id !== userId) {
+      // Verificar si es admin
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+      
+      if (!profile || profile.role !== "admin") {
+        console.error("Usuario no tiene permisos para generar PDF de otro usuario")
+        return NextResponse.json({ error: "No tienes permisos para generar este PDF" }, { status: 403 })
+      }
+    }
 
     // Obtener datos del usuario
-    const { data: profileData, error: profileError } = await supabase.from("profiles").select("*").eq("id", userId)
+    const { data: profileData, error: profileError } = await supabase.from("profiles").select("*").eq("id", userId).single()
 
     if (profileError) {
       console.error("Error al obtener perfil:", profileError)
       return NextResponse.json({ error: `Error al obtener perfil: ${profileError.message}` }, { status: 500 })
     }
+
+    if (!profileData) {
+      console.error("No se encontró perfil para el usuario:", userId)
+      return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 })
+    }
+
+    console.log("Perfil encontrado:", { id: profileData.id, email: profileData.email, full_name: profileData.full_name })
 
     // Obtener información personal
     const { data: personalInfoData, error: personalInfoError } = await supabase
@@ -77,27 +104,21 @@ export async function POST(request: Request) {
     }
 
     // Si no tenemos información personal pero tenemos perfil, usamos los datos del perfil
-    if (!personalInfo && profileData && profileData.length > 0) {
-      const profile = profileData[0]
+    if (!personalInfo && profileData) {
       personalInfo = {
         user_id: userId,
-        email: profile.email,
-        full_name: profile.full_name,
+        email: profileData.email,
+        full_name: profileData.full_name,
       }
     }
 
-    // Si aún no tenemos información personal, intentamos obtenerla de auth.users
+    // Si aún no tenemos información personal, crear un objeto mínimo con los datos disponibles
     if (!personalInfo) {
-      const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId)
-
-      if (userError) {
-        console.error("Error al obtener datos del usuario:", userError)
-      } else if (userData && userData.user) {
-        personalInfo = {
-          user_id: userId,
-          email: userData.user.email,
-          full_name: userData.user.user_metadata?.full_name,
-        }
+      console.log("No se encontró información personal específica, usando datos básicos del perfil")
+      personalInfo = {
+        user_id: userId,
+        email: profileData ? profileData.email : null,
+        full_name: profileData ? profileData.full_name : null,
       }
     }
 
@@ -113,7 +134,7 @@ export async function POST(request: Request) {
     const fileName = `hoja_de_vida_${userId}_${timestamp}.pdf`
 
     // Actualizar el perfil para indicar que se ha generado el CV
-    if (profileData && profileData.length > 0) {
+    if (profileData) {
       const { error: updateError } = await supabase
         .from("profiles")
         .update({
@@ -123,11 +144,13 @@ export async function POST(request: Request) {
 
       if (updateError) {
         console.error("Error al actualizar el perfil:", updateError)
+      } else {
+        console.log("Perfil actualizado: cv_generated = true")
       }
     }
 
     // Devolver el PDF como respuesta
-    return new NextResponse(pdfBytes, {
+    return new NextResponse(new Uint8Array(pdfBytes), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${fileName}"`,

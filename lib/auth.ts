@@ -18,6 +18,7 @@ export async function getUserRole() {
 
     // Obtener el rol desde los metadatos del usuario
     if (user.user_metadata?.role) {
+      console.log("Role from user_metadata:", user.user_metadata.role)
       return user.user_metadata.role
     }
 
@@ -25,9 +26,11 @@ export async function getUserRole() {
     const { data, error } = await supabase.from("profiles").select("role").eq("id", user.id).single()
 
     if (error) {
-      console.error("Error getting user role:", error)
+      console.error("Error getting user role from profiles:", error)
       return "user" // Rol por defecto
     }
+
+    console.log("Role from profiles table:", data.role)
 
     // Actualizar los metadatos del usuario con el rol obtenido
     await supabase.auth.updateUser({
@@ -46,11 +49,27 @@ export async function updateUserRole(userId: string, role: string) {
   try {
     const supabase = createClient()
 
-    // Actualizar el rol en la tabla profiles
-    const { error } = await supabase.from("profiles").update({ role }).eq("id", userId)
+    // También actualizar los metadatos del usuario de forma prioritaria
+    const { data: updatedUser, error: metadataError } = await supabase.auth.admin.updateUserById(userId, {
+      user_metadata: { role },
+    })
 
-    if (error) {
-      console.error("Error updating user role:", error)
+    if (metadataError) {
+      console.error("Error updating user metadata (admin):", metadataError)
+      // Considerar si esto debe ser un error fatal o si la actualización de 'profiles' es suficiente como fallback.
+      // Por ahora, si falla metadata pero profiles tuvo éxito, podría ser aceptable con un warning.
+      // return false; // Descomentar si la actualización de metadata es crítica.
+    } else {
+      console.log("User metadata updated successfully for role:", role)
+    }
+
+    // Actualizar el rol en la tabla profiles (puede ser redundante si la metadata es la fuente de verdad,
+    // pero bueno para consistencia o si hay triggers/RLS basados en la tabla profiles)
+    const { error: profileError } = await supabase.from("profiles").update({ role }).eq("id", userId)
+
+    if (profileError) {
+      console.error("Error updating user role in profiles:", profileError)
+      // Si metadata se actualizó pero profiles falló, es un estado inconsistente.
       return false
     }
 

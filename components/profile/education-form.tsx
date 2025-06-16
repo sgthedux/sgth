@@ -2,24 +2,28 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus } from "lucide-react"
+import { AlertCircle, Plus } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DocumentUpload } from "@/components/profile/document-upload"
+import { AutoDocumentUpload } from "@/components/profile/auto-document-upload"
 import { DatePicker } from "@/components/date-picker"
 import { DeleteConfirmation } from "@/components/delete-confirmation"
 import { ValidatedInput } from "@/components/ui/validated-input"
 import { validationRules } from "@/lib/validations"
 import { useUser } from "@/hooks/use-user"
-
-import { useToast } from "@/components/ui/use-toast"
+import { secureDB } from "@/lib/supabase/secure-client"
+import { useFormCache } from "@/hooks/use-form-cache"
+import { useDBData } from "@/hooks/use-db-data"
+import { notifications } from "@/lib/notifications"
 
 interface EducationFormProps {
   userId: string
@@ -49,39 +53,63 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("basic")
   const { user } = useUser()
-  const [loadingData, setLoadingData] = useState(true)
-  const [items, setItems] = useState(
-    educations.length > 0
-      ? educations
-      : [
-          {
-            id: "",
-            education_type: "basic",
-            institution: "",
-            degree: "",
-            field_of_study: "",
-            level: "",
-            graduation_date: null,
-            start_date: "",
-            end_date: null,
-            current: false,
-            semesters_completed: null,
-            graduated: false,
-            professional_card_number: null,
-            description: "",
-            institution_country: "Colombia",
-            title_validated: false,
-            ies_code: "",
-            academic_modality: "",
-          },
-        ],
-  )
-  const [loading, setLoading] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const { toast } = useToast()
-  const [academicModalities, setAcademicModalities] = useState<any[]>([])
   const supabase = createClient()
+
+  // Configuración inicial de datos con useMemo
+  const initialData = useMemo(() => [{
+    id: "",
+    education_type: "basic",
+    institution: "",
+    degree: "",
+    field_of_study: "",
+    level: "",
+    graduation_date: null,
+    start_date: "",
+    end_date: null,
+    current: false,
+    semesters_completed: null,
+    graduated: false,
+    professional_card_number: null,
+    description: "",
+    institution_country: "Colombia",
+    title_validated: false,
+    ies_code: "",
+    academic_modality: "",
+  }], [])
+
+  // Cache local de datos del formulario
+  const {
+    data: items,
+    updateData: setItems,
+    isDirty,
+    clearCache
+  } = useFormCache(initialData, {
+    formKey: 'education',
+    userId,
+    autoSave: true
+  })
+
+  // Carga automática de datos desde la base de datos
+  const {
+    data: dbEducations,
+    loading: loadingData,
+    error: dbError,
+    refetch: refetchEducations
+  } = useDBData<any>({
+    userId,
+    table: 'education',
+    enabled: !!userId
+  })
+
+  // Cargar datos existentes cuando estén disponibles
+  useEffect(() => {
+    if (dbEducations && dbEducations.length > 0 && items.length === 1 && !items[0].institution) {
+      setItems(dbEducations)
+    }
+  }, [dbEducations, items, setItems])
+
+  const [loading, setLoading] = useState(false)
+  const [academicModalities, setAcademicModalities] = useState<any[]>([])
 
   // Cargar catálogos
   useEffect(() => {
@@ -97,52 +125,15 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
         setAcademicModalities(modalities || [])
       } catch (error) {
         console.error("Error al cargar catálogos:", error)
+        notifications.error.load("catálogos de modalidades académicas")
       }
     }
 
     loadCatalogs()
   }, [supabase])
 
-  // Cargar datos existentes del usuario
-  useEffect(() => {
-    const loadExistingData = async () => {
-      if (!user?.id) return
-
-      try {
-        setLoadingData(true)
-        console.log("Cargando educación existente para usuario:", user.id)
-
-        const { data: existingEducation, error: existingEducationError } = await supabase
-          .from("education")
-          .select("*")
-          .eq("user_id", user.id);
-
-        if (existingEducationError) {
-          console.error("Error fetching existing education:", existingEducationError)
-          // Handle error appropriately
-        } else if (existingEducation && existingEducation.length > 0) {
-          setItems(existingEducation)
-          console.log("Datos de educación cargados exitosamente")
-        } else {
-          console.log("No se encontró educación existente")
-        }
-      } catch (error) {
-        console.error("Error cargando educación existente:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Error al cargar los datos existentes",
-        })
-      } finally {
-        setLoadingData(false)
-      }
-    }
-
-    loadExistingData()
-  }, [user?.id, toast])
-
   const handleAddItem = (type: string) => {
-    setItems([
+    const newItems = [
       ...items,
       {
         id: "",
@@ -164,7 +155,8 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
         ies_code: "",
         academic_modality: "",
       },
-    ])
+    ]
+    setItems(newItems)
   }
 
   const handleRemoveItem = async (index: number) => {
@@ -174,18 +166,10 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
       newItems.splice(index, 1)
       setItems(newItems)
 
-      toast({
-        variant: "success",
-        title: "Éxito",
-        description: `Educación ${index + 1} eliminada correctamente`,
-      })
+      notifications.success.delete(`Educación ${index + 1}`)
     } catch (error) {
       console.error("Error al eliminar la educación:", error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Error al eliminar la educación. Inténtelo de nuevo.",
-      })
+      notifications.error.delete("la educación")
     }
   }
 
@@ -197,50 +181,132 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Prevenir múltiples envíos
+    if (loading) return
+    
     setLoading(true)
 
     try {
-      // Delete existing education records
-      if (educations.length > 0) {
-        const { error: deleteError } = await supabase.from("education").delete().eq("user_id", userId)
-        if (deleteError) throw deleteError
+      // Validar que no haya campos obligatorios vacíos
+      const invalidItems = items.filter(item => {
+        const basicValidation = !item.institution.trim() || 
+          !item.degree.trim() || 
+          !item.education_type.trim() ||
+          !item.level.trim() ||
+          (item.level === "OTHER" && !item.description?.trim())
+
+        // Validación adicional para educación superior
+        if (item.education_type === "higher") {
+          return basicValidation || 
+            !item.field_of_study?.trim() ||
+            (!item.graduated && !item.current && !item.semesters_completed)
+        }
+
+        return basicValidation
+      })
+      
+      if (invalidItems.length > 0) {
+        const hasHigherEducation = invalidItems.some(item => item.education_type === "higher")
+        const message = hasHigherEducation 
+          ? "Para educación superior: por favor complete institución, título, área de estudio, nivel académico y estado de graduación"
+          : "Por favor complete todos los campos obligatorios: institución, título, tipo de educación y nivel académico"
+        
+        notifications.error.validation(message)
+        setLoading(false)
+        return
       }
 
-      // Insert new education records
+      // Obtener educaciones existentes para comparar
+      const { data: existingEducations, error: fetchError } = await supabase
+        .from("education")
+        .select("*")
+        .eq("user_id", userId)
+
+      if (fetchError) throw fetchError
+
+      // Preparar datos para upsert
       const educationData = items.map((item) => {
+        // Buscar si ya existe una educación similar
+        const existingItem = existingEducations?.find(existing => 
+          existing.institution === item.institution &&
+          existing.degree === item.degree &&
+          existing.education_type === item.education_type
+        )
+
         // Asegurarse de que los campos de fecha sean null si están vacíos
         const graduation_date = item.graduation_date || null
         const start_date = item.start_date || null
         const end_date = item.current ? null : item.end_date || null
 
-        return {
+        // Limpiar y validar datos antes del upsert
+        const cleanData = {
+          id: existingItem?.id || item.id || undefined, // Usar ID existente si lo hay
           user_id: userId,
           education_type: item.education_type,
-          institution: item.institution,
-          degree: item.degree,
-          field_of_study: item.field_of_study,
+          institution: item.institution.trim(),
+          degree: item.degree.trim(),
+          field_of_study: item.field_of_study?.trim() || null,
           level: item.level,
           graduation_date,
           start_date,
           end_date,
-          current: item.current,
-          semesters_completed: item.semesters_completed,
-          graduated: item.graduated,
-          professional_card_number: item.professional_card_number,
-          description: item.description,
-          institution_country: item.institution_country,
-          title_validated: item.title_validated,
-          ies_code: item.ies_code,
-          academic_modality: item.academic_modality,
+          current: Boolean(item.current),
+          semesters_completed: item.semesters_completed ? Number(item.semesters_completed) : null,
+          graduated: Boolean(item.graduated),
+          professional_card_number: item.professional_card_number ? String(item.professional_card_number).trim() || null : null,
+          description: item.description ? String(item.description).trim() || null : null,
+          institution_country: item.institution_country || "Colombia",
+          title_validated: Boolean(item.title_validated),
+          ies_code: item.ies_code ? String(item.ies_code).trim() || null : null,
+          academic_modality: item.academic_modality ? String(item.academic_modality).trim() || null : null,
         }
+
+        // Eliminar campos undefined para evitar problemas con Supabase
+        Object.keys(cleanData).forEach(key => {
+          if (cleanData[key as keyof typeof cleanData] === undefined) {
+            delete cleanData[key as keyof typeof cleanData]
+          }
+        })
+
+        return cleanData
       })
 
-      const { data: insertedEducations, error: insertError } = await supabase
-        .from("education")
-        .insert(educationData)
-        .select()
+      console.log("Datos limpios para upsert:", educationData)
 
-      if (insertError) throw insertError
+      // Separar inserts y updates para mejor control
+      const insertsData = educationData.filter(item => !item.id)
+      const updatesData = educationData.filter(item => item.id)
+
+      console.log("Datos para insertar:", insertsData)
+      console.log("Datos para actualizar:", updatesData)
+
+      // Primero hacer inserts (sin ID)
+      if (insertsData.length > 0) {
+        const { error: insertError } = await supabase
+          .from("education")
+          .insert(insertsData)
+        
+        if (insertError) {
+          console.error("Error en insert:", insertError)
+          throw insertError
+        }
+      }
+
+      // Luego hacer updates (con ID)
+      if (updatesData.length > 0) {
+        for (const updateItem of updatesData) {
+          const { error: updateError } = await supabase
+            .from("education")
+            .update(updateItem)
+            .eq("id", updateItem.id)
+          
+          if (updateError) {
+            console.error("Error en update:", updateError)
+            throw updateError
+          }
+        }
+      }
 
       // Update profile status
       const { error: profileError } = await supabase
@@ -250,22 +316,35 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
 
       if (profileError) throw profileError
 
-      toast({
-        variant: "success",
-        title: "Éxito",
-        description: "Información educativa guardada correctamente",
-      })
+      // Limpiar cache después de guardar exitosamente
+      clearCache()
+      
+      // Refrescar datos de la base de datos
+      refetchEducations()
+      
+      notifications.success.save("Información educativa")
 
       // Esperar un momento antes de refrescar para que el usuario vea el mensaje de éxito
       setTimeout(() => {
         router.refresh()
       }, 1500)
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Error al guardar la información educativa",
-      })
+      console.error("=== ERROR DETALLADO EN EDUCATION-FORM ===")
+      console.error("Error completo:", error)
+      console.error("Error message:", error.message)
+      console.error("Error details:", error.details)
+      console.error("Error code:", error.code)
+      console.error("Error hint:", error.hint)
+      console.error("Error stack:", error.stack)
+      console.error("Error name:", error.name)
+      console.error("Error toString:", error.toString())
+      console.error("=== FIN ERROR DETALLADO ===")
+      
+      // Mostrar mensaje de error genérico hasta identificar el problema específico
+      const errorMessage = "Error al guardar la información educativa. Verifica los logs de la consola."
+      
+      console.error("Mensaje de error para el usuario:", errorMessage)
+      notifications.error.generic(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -324,18 +403,10 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                           userId={userId}
                           documentKey={`${userId}/education_basic_${index}`}
                           onSuccess={() => {
-                            toast({
-                              variant: "success",
-                              title: "Éxito",
-                              description: `Educación básica ${index + 1} eliminada correctamente`,
-                            })
+                            notifications.success.delete(`Educación básica ${index + 1}`)
                           }}
                           onError={(error) => {
-                            toast({
-                              variant: "destructive",
-                              title: "Error",
-                              description: `Error al eliminar: ${error.message}`,
-                            })
+                            notifications.error.delete("educación básica", error.message)
                           }}
                         />
                       )}
@@ -429,12 +500,19 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                     </div>
 
                     <div className="space-y-4">
-                      <Label>Documento de Soporte</Label>
-                      <DocumentUpload
+                      <AutoDocumentUpload
                         userId={userId}
-                        documentType={documentType}
-                        itemId={`basic_${index}`}
-                        label="Subir diploma o certificado de educación básica"
+                        documentType="basic_education_certificate"
+                        formType="education"
+                        itemIndex={index}
+                        label="Certificado de Educación Básica/Media"
+                        required
+                        onUploadSuccess={(url: string) => {
+                          console.log("Documento de educación básica subido exitosamente:", url)
+                        }}
+                        onUploadError={(error: string) => {
+                          console.error("Error al subir documento de educación básica:", error)
+                        }}
                       />
                     </div>
                   </div>
@@ -473,18 +551,10 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                           userId={userId}
                           documentKey={`${userId}/education_higher_${index}`}
                           onSuccess={() => {
-                            toast({
-                              variant: "success",
-                              title: "Éxito",
-                              description: `Educación superior ${index + 1} eliminada correctamente`,
-                            })
+                            notifications.success.delete(`Educación superior ${index + 1}`)
                           }}
                           onError={(error) => {
-                            toast({
-                              variant: "destructive",
-                              title: "Error",
-                              description: `Error al eliminar: ${error.message}`,
-                            })
+                            notifications.error.delete("educación superior", error.message)
                           }}
                         />
                       )}
@@ -579,6 +649,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                             <SelectItem value="ES">Especialización (ES)</SelectItem>
                             <SelectItem value="MG">Maestría (MG)</SelectItem>
                             <SelectItem value="DOC">Doctorado (DOC)</SelectItem>
+                            <SelectItem value="OTHER">Otro</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -601,6 +672,23 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                       </div>
                     </div>
 
+                    {/* Campo condicional para "Otro" - Fuera del grid para que ocupe toda la fila */}
+                    {item.level === "OTHER" && (
+                      <div className="space-y-2">
+                        <ValidatedInput
+                          id={`level-other-${index}`}
+                          label="Especifique el nivel académico"
+                          type="text"
+                          value={item.description || ""}
+                          onChange={(e) => handleItemChange(itemIndex, "description", e.target.value)}
+                          validationRules={[validationRules.required, validationRules.name]}
+                          sanitizer="name"
+                          required
+                          placeholder="Ingrese el nivel académico"
+                        />
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div className="space-y-2">
                         <Label htmlFor={`graduated-${index}`}>Graduado</Label>
@@ -618,8 +706,8 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                         <Label htmlFor={`title-validated-${index}`}>Título Convalidado</Label>
                         <div className="flex items-center h-10 space-x-2">
                           <Checkbox
-                            id={`title_validated_${index}`}
-                            checked={item.title_validated ?? false}
+                            id={`title-validated-${index}`}
+                            checked={!!item.title_validated}
                             onCheckedChange={(checked) => handleItemChange(itemIndex, "title_validated", !!checked)}
                           />
                           <Label htmlFor={`title-validated-${index}`}>Sí</Label>
@@ -687,12 +775,19 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                     )}
 
                     <div className="space-y-4">
-                      <Label>Documento de Soporte</Label>
-                      <DocumentUpload
+                      <AutoDocumentUpload
                         userId={userId}
-                        documentType={documentType}
-                        itemId={`higher_${index}`}
-                        label="Subir diploma o certificado de educación superior"
+                        documentType="higher_education_diploma"
+                        formType="education"
+                        itemIndex={index}
+                        label="Diploma de Educación Superior"
+                        required
+                        onUploadSuccess={(url: string) => {
+                          console.log("Documento de educación superior subido exitosamente:", url)
+                        }}
+                        onUploadError={(error: string) => {
+                          console.error("Error al subir documento de educación superior:", error)
+                        }}
                       />
                     </div>
                   </div>

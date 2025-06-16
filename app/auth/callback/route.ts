@@ -1,52 +1,53 @@
-import { createClient } from "@/lib/supabase/server"
-import { NextResponse } from "next/server"
+// ESTE ARCHIVO DEBE SER CORREGIDO COMO SE INDICÓ EN LA RESPUESTA ANTERIOR.
+// Lo incluyo aquí para que esté en el CodeProject, pero usa la versión corregida
+// que te proporcioné que maneja correctamente las cookies.
+// Si no lo has hecho, por favor, actualízalo.
+import { createServerClient, type CookieOptions } from "@supabase/ssr"
+import { NextResponse, type NextRequest } from "next/server"
 
-export async function GET(request: Request) {
-  const requestUrl = new URL(request.url)
-  const code = requestUrl.searchParams.get("code")
-  const next = requestUrl.searchParams.get("next") || "/"
+export async function GET(request: NextRequest) {
+  const { searchParams, origin } = new URL(request.url)
+  const code = searchParams.get("code")
+  const next = searchParams.get("next") ?? "/"
 
   if (code) {
-    const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    // Necesitamos crear una respuesta aquí para poder establecer cookies
+    const response = NextResponse.redirect(new URL(next, origin).toString()) // Redirección por defecto
 
-    if (error) {
-      console.error("Error exchanging code for session:", error)
-      return NextResponse.redirect(new URL(`/auth/login?error=${encodeURIComponent(error.message)}`, requestUrl.origin))
-    }
-
-    // Después de autenticar, obtenemos el usuario y su rol
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get: (name: string) => request.cookies.get(name)?.value,
+          set: (name: string, value: string, options: CookieOptions) => {
+            response.cookies.set({ name, value, ...options }) // Establecer cookie en la respuesta
+          },
+          remove: (name: string, options: CookieOptions) => {
+            response.cookies.set({ name, value: "", ...options }) // Eliminar cookie en la respuesta
+          },
+        },
+      },
+    )
     const {
-      data: { user },
-    } = await supabase.auth.getUser()
+      error,
+      data: { session },
+    } = await supabase.auth.exchangeCodeForSession(code)
 
-    if (user) {
-      try {
-        // Obtenemos el rol del usuario
-        const { data: profileData } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-
-        const role = profileData?.role || "user"
-
-        // Actualizamos los metadatos del usuario con su rol
-        await supabase.auth.updateUser({
-          data: { role },
-        })
-
-        // Forzar una redirección completa con un parámetro de tiempo para evitar caché
-        const timestamp = Date.now()
-
-        // Redirigimos según el rol
-        if (role === "admin") {
-          return NextResponse.redirect(new URL(`/admin/dashboard?t=${timestamp}`, requestUrl.origin))
-        } else {
-          return NextResponse.redirect(new URL(`/dashboard?t=${timestamp}`, requestUrl.origin))
-        }
-      } catch (error) {
-        console.error("Error setting user role in metadata:", error)
-      }
+    if (!error && session) {
+      console.log(
+        `Auth callback successful for user ${session.user.id}, redirecting to: ${new URL(next, origin).toString()}`,
+      )
+      // La URL de redirección ya está en 'response', y las cookies se establecieron.
+      return response
     }
+    console.error("Auth callback error exchanging code:", error?.message)
+  } else {
+    console.error("Auth callback: No code found in search params")
   }
 
-  // Si no hay código o hubo un error, redirigimos a la página especificada o a la raíz
-  return NextResponse.redirect(new URL(next, requestUrl.origin))
+  // Fallback redirect en caso de error o no code
+  const errorRedirectPath = new URL("/auth/login?error=auth_callback_failed", origin).toString()
+  console.log(`Auth callback failed or no code, redirecting to: ${errorRedirectPath}`)
+  return NextResponse.redirect(errorRedirectPath)
 }

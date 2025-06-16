@@ -166,7 +166,8 @@ export async function generatePdf(userData: any, educationData: any[], experienc
 
     // Cargar el logo
     try {
-      const logoUrl = "/images/logo.png" // Ruta relativa al logo
+      // Usar la URL del dominio para obtener el logo
+      const logoUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/images/logo.png`
       const logoResponse = await fetch(logoUrl)
       if (!logoResponse.ok) {
         throw new Error(`Error al cargar el logo: ${logoResponse.status}`)
@@ -229,22 +230,13 @@ export async function generatePdf(userData: any, educationData: any[], experienc
 
     // Llenar datos personales
     if (userData) {
-      // Extraer nombres y apellidos
-      let firstName = ""
-      let lastName = ""
-      let secondLastName = ""
-
-      if (userData.first_name) {
-        firstName = userData.first_name
-      }
-
-      if (userData.first_surname || userData.last_name) {
-        lastName = userData.first_surname || userData.last_name
-      }
-
-      if (userData.second_surname) {
-        secondLastName = userData.second_surname
-      }
+      console.log("Datos del usuario para mapear:", JSON.stringify(userData, null, 2))
+      console.log("Claves disponibles:", Object.keys(userData))
+      
+      // Extraer nombres y apellidos - mapear todos los posibles nombres de campos
+      let firstName = userData.first_name || userData.nombres || userData.name || ""
+      let lastName = userData.first_surname || userData.last_name || userData.primer_apellido || userData.apellido || ""
+      let secondLastName = userData.second_surname || userData.segundo_apellido || userData.middle_name || ""
 
       // Si tenemos full_name pero no tenemos los componentes individuales
       if (userData.full_name && (!firstName || !lastName)) {
@@ -261,24 +253,36 @@ export async function generatePdf(userData: any, educationData: any[], experienc
         }
       }
 
+      console.log("Nombres extraídos:", { firstName, lastName, secondLastName })
+
       // Dibujar nombres y apellidos
       drawText(lastName, P1.primerApellido, page1)
       drawText(secondLastName, P1.segundoApellido, page1)
       drawText(firstName, P1.nombres, page1)
 
-      // Documento de identificación
-      const docType = userData.identification_type || userData.document_type || ""
-      markCheckbox(docType.toLowerCase() === "cc", P1.tipoDocCC, page1)
-      markCheckbox(docType.toLowerCase() === "ce", P1.tipoDocCE, page1)
-      markCheckbox(docType.toLowerCase() === "passport" || docType.toLowerCase() === "pas", P1.tipoDocPAS, page1)
+      // Documento de identificación - revisar todos los posibles nombres de campos
+      const docType = userData.identification_type || userData.document_type || userData.tipo_documento || ""
+      const docNumber = userData.identification_number || userData.document_number || userData.numero_documento || ""
+      
+      console.log("Documento:", { docType, docNumber })
+      
+      markCheckbox(docType.toLowerCase() === "cc" || docType.toLowerCase() === "cedula", P1.tipoDocCC, page1)
+      markCheckbox(docType.toLowerCase() === "ce" || docType.toLowerCase() === "cedula_extranjeria", P1.tipoDocCE, page1)
+      markCheckbox(docType.toLowerCase() === "passport" || docType.toLowerCase() === "pas" || docType.toLowerCase() === "pasaporte", P1.tipoDocPAS, page1)
 
-      drawText(userData.identification_number || userData.document_number || "", P1.numeroDocumento, page1)
+      drawText(docNumber, P1.numeroDocumento, page1)
 
       // Libreta Militar
-      drawText(userData.military_booklet_number || "", P1.libretaMilitarNumero, page1)
+      const militaryNumber = userData.military_booklet_number || userData.numero_libreta_militar || ""
+      const militaryDistrict = userData.military_district || userData.distrito_militar || ""
+      const militaryType = userData.military_booklet_type || userData.tipo_libreta_militar || ""
+      
+      console.log("Datos militares:", { militaryNumber, militaryDistrict, militaryType })
+      
+      drawText(militaryNumber, P1.libretaMilitarNumero, page1)
+      drawText(militaryDistrict, P1.libretaMilitarDistrito, page1)
 
       // Marcar con X la clase de libreta militar
-      const militaryType = userData.military_booklet_type || ""
       markCheckbox(
         militaryType.toLowerCase().includes("primera") || militaryType === "1",
         P1.libretaMilitarPrimera,
@@ -290,46 +294,70 @@ export async function generatePdf(userData: any, educationData: any[], experienc
         page1,
       )
 
-      drawText(userData.military_district || "", P1.libretaMilitarDistrito, page1)
-
-      // Sexo
-      const gender = userData.gender || ""
-      markCheckbox(gender.toUpperCase() === "F", P1.sexoF, page1)
-      markCheckbox(gender.toUpperCase() === "M", P1.sexoM, page1)
+      // Sexo/Género
+      const gender = userData.gender || userData.sexo || userData.sex || ""
+      console.log("Género:", gender)
+      
+      markCheckbox(gender.toUpperCase() === "F" || gender.toLowerCase() === "femenino" || gender.toLowerCase() === "female", P1.sexoF, page1)
+      markCheckbox(gender.toUpperCase() === "M" || gender.toLowerCase() === "masculino" || gender.toLowerCase() === "male", P1.sexoM, page1)
 
       // Nacionalidad
-      const isColombiano = (userData.nationality || "").toLowerCase().includes("colomb")
+      const nationality = userData.nationality || userData.nacionalidad || ""
+      const country = userData.country || userData.pais || userData.country_birth || "Colombia"
+      const isColombiano = nationality.toLowerCase().includes("colomb") || country.toLowerCase().includes("colomb") || nationality === ""
+      
+      console.log("Nacionalidad:", { nationality, country, isColombiano })
+      
       markCheckbox(isColombiano, P1.nacionalidadCol, page1)
       markCheckbox(!isColombiano, P1.nacionalidadOtra, page1)
 
       if (!isColombiano) {
-        drawText(userData.nationality || "", P1.nacionalidad, page1)
+        drawText(nationality, P1.nacionalidad, page1)
       }
 
-      drawText(userData.country || "Colombia", P1.pais, page1)
+      drawText(country, P1.pais, page1)
 
-      // Fecha y lugar de nacimiento
-      if (userData.birth_date) {
-        const birthDate = new Date(userData.birth_date)
-        drawText(birthDate.getDate().toString().padStart(2, "0"), P1.fechaNacDia, page1)
-        drawText((birthDate.getMonth() + 1).toString().padStart(2, "0"), P1.fechaNacMes, page1)
-        drawText(birthDate.getFullYear().toString(), P1.fechaNacAnio, page1)
+      // Fecha y lugar de nacimiento - revisar todos los posibles nombres de campos
+      const birthDate = userData.birth_date || userData.fecha_nacimiento || userData.birthdate || userData.date_of_birth
+      
+      console.log("Fecha de nacimiento:", birthDate)
+      
+      if (birthDate) {
+        const birth = new Date(birthDate)
+        if (!isNaN(birth.getTime())) {
+          drawText(birth.getDate().toString().padStart(2, "0"), P1.fechaNacDia, page1)
+          drawText((birth.getMonth() + 1).toString().padStart(2, "0"), P1.fechaNacMes, page1)
+          drawText(birth.getFullYear().toString(), P1.fechaNacAnio, page1)
+        }
       }
 
-      drawText(userData.birth_country || "Colombia", P1.paisNacimiento, page1)
-      drawText(userData.birth_state || userData.birth_department || "", P1.deptoNacimiento, page1)
-      drawText(userData.birth_city || "", P1.municipioNacimiento, page1)
+      const birthCountry = userData.birth_country || userData.pais_nacimiento || userData.country_birth || "Colombia"
+      const birthState = userData.birth_state || userData.birth_department || userData.departamento_nacimiento || userData.state_birth || ""
+      const birthCity = userData.birth_city || userData.ciudad_nacimiento || userData.city_birth || ""
+      
+      console.log("Lugar de nacimiento:", { birthCountry, birthState, birthCity })
+      
+      drawText(birthCountry, P1.paisNacimiento, page1)
+      drawText(birthState, P1.deptoNacimiento, page1)
+      drawText(birthCity, P1.municipioNacimiento, page1)
 
       // Dirección y contacto
-      drawText(userData.address || "", P1.direccion, page1)
-      drawText(userData.phone || "", P1.telefono, page1)
-      drawText(userData.email || "", P1.email, page1)
-      drawText(userData.residence_country || userData.country || "Colombia", P1.paisResidencia, page1)
-      drawText(userData.residence_state || userData.state || "", P1.deptoResidencia, page1)
-      drawText(userData.residence_city || userData.city || "", P1.municipioResidencia, page1)
+      const address = userData.address || userData.direccion || userData.street_address || ""
+      const phone = userData.phone || userData.telefono || userData.phone_number || ""
+      const email = userData.email || userData.correo || userData.email_address || ""
+      
+      console.log("Contacto:", { address, phone, email })
+      
+      drawText(address, P1.direccion, page1)
+      drawText(phone, P1.telefono, page1)
+      drawText(email, P1.email, page1)
+      drawText(userData.residence_country || userData.country || userData.pais_residencia || "Colombia", P1.paisResidencia, page1)
+      drawText(userData.residence_state || userData.state || userData.departamento_residencia || "", P1.deptoResidencia, page1)
+      drawText(userData.residence_city || userData.city || userData.ciudad_residencia || "", P1.municipioResidencia, page1)
     }
 
     // Llenar educación
+    console.log("Datos de educación recibidos:", JSON.stringify(educationData, null, 2))
     if (educationData && educationData.length > 0) {
       // Educación básica
       const basicEducation = educationData.find(
@@ -338,6 +366,8 @@ export async function generatePdf(userData: any, educationData: any[], experienc
           edu.level === "basic" ||
           (edu.field_of_study && ["Primaria", "Secundaria", "Media"].includes(edu.field_of_study)),
       )
+
+      console.log("Educación básica encontrada:", basicEducation)
 
       if (basicEducation) {
         // Marcar nivel educativo
@@ -435,6 +465,7 @@ export async function generatePdf(userData: any, educationData: any[], experienc
     }
 
     // Llenar idiomas
+    console.log("Datos de idiomas recibidos:", JSON.stringify(languagesData, null, 2))
     if (languagesData && languagesData.length > 0) {
       // Primer idioma
       if (languagesData.length > 0) {
@@ -490,6 +521,7 @@ export async function generatePdf(userData: any, educationData: any[], experienc
     }
 
     // Llenar experiencia laboral
+    console.log("Datos de experiencia recibidos:", JSON.stringify(experienceData, null, 2))
     if (experienceData && experienceData.length > 0) {
       // Ordenar experiencias por fecha de inicio (más reciente primero)
       const sortedExperiences = [...experienceData].sort((a, b) => {
@@ -701,4 +733,105 @@ function calculateExperienceBySector(experiences: any[], sectorType: string): { 
   const months = totalMonths % 12
 
   return { years, months }
+}
+
+// Función para manejar la solicitud POST y generar el PDF
+export async function POST(request: Request) {
+  try {
+    const { userId } = await request.json()
+
+    if (!userId) {
+      return NextResponse.json({ error: "Se requiere el ID del usuario" }, { status: 400 })
+    }
+
+    console.log("Generando PDF para el usuario:", userId)
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+      process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+    )
+
+    // Obtener datos del usuario (perfil)
+    console.log(`Intentando obtener perfil para userId: ${userId}`)
+    const { data: profileData, error: profileError } = await supabase.from("profiles").select("*").eq("id", userId)
+
+    if (profileError) {
+      console.error("Error al obtener perfil:", profileError)
+      // No retornar aquí todavía, podríamos tener datos en personal_info
+    }
+    console.log("Datos crudos de profileData:", JSON.stringify(profileData, null, 2))
+    if (profileError) {
+        console.error("Detalle del error al obtener perfil:", profileError.message)
+    }
+
+
+    // Obtener información personal
+    console.log(`Intentando obtener personal_info para userId: ${userId}`)
+    const { data: personalInfoData, error: personalInfoError } = await supabase
+      .from("personal_info")
+      .select("*")
+      .eq("user_id", userId)
+
+    if (personalInfoError) {
+      console.error("Error al obtener información personal:", personalInfoError)
+    }
+    console.log("Datos crudos de personalInfoData:", JSON.stringify(personalInfoData, null, 2))
+    if (personalInfoError) {
+        console.error("Detalle del error al obtener información personal:", personalInfoError.message)
+    }
+
+    // Combinar datos de perfil y información personal
+    const userData = { ...profileData[0], ...personalInfoData[0] }
+    console.log("Datos combinados del usuario:", JSON.stringify(userData, null, 2))
+
+    // Obtener educación
+    const { data: educationData, error: educationError } = await supabase
+      .from("education")
+      .select("*")
+      .eq("user_id", userId)
+      .order("end_date", { ascending: false })
+
+    if (educationError) {
+      console.error("Error al obtener educación:", educationError)
+    }
+    console.log("Datos crudos de educación:", JSON.stringify(educationData, null, 2))
+
+    // Obtener experiencia laboral
+    const { data: experienceData, error: experienceError } = await supabase
+      .from("experience")
+      .select("*")
+      .eq("user_id", userId)
+      .order("end_date", { ascending: false })
+
+    if (experienceError) {
+      console.error("Error al obtener experiencia laboral:", experienceError)
+    }
+    console.log("Datos crudos de experiencia laboral:", JSON.stringify(experienceData, null, 2))
+
+    // Obtener idiomas
+    const { data: languagesData, error: languagesError } = await supabase
+      .from("languages")
+      .select("*")
+      .eq("user_id", userId)
+
+    if (languagesError) {
+      console.error("Error al obtener idiomas:", languagesError)
+    }
+    console.log("Datos crudos de idiomas:", JSON.stringify(languagesData, null, 2))
+
+    // Generar el PDF con todos los datos
+    const pdfBytes = await generatePdf(userData, educationData, experienceData, languagesData)
+
+    // Retornar el PDF generado
+    return new Response(pdfBytes, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="reporte_${userId}.pdf"`,
+      },
+    })
+  } catch (error) {
+    console.error("Error en la función POST:", error)
+    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
+  }
 }

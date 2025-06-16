@@ -1,24 +1,22 @@
 "use client"
 
-import { CardFooter } from "@/components/ui/card"
-
 import { Label } from "@/components/ui/label"
-
 import type React from "react"
-
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus } from "lucide-react"
-import { DocumentUpload } from "@/components/profile/document-upload"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { AlertCircle, Plus } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AutoDocumentUpload } from "@/components/profile/auto-document-upload"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { DeleteConfirmation } from "@/components/delete-confirmation"
 import { ValidatedInput } from "@/components/ui/validated-input"
 import { validationRules } from "@/lib/validations"
-import { useUser } from "@/hooks/use-user"
-import { useToast } from "@/components/ui/use-toast"
+import { useFormCache } from "@/hooks/use-form-cache"
+import { useDBData } from "@/hooks/use-db-data"
+import { notifications } from "@/lib/notifications"
 
 interface LanguageFormProps {
   userId: string
@@ -31,108 +29,54 @@ interface LanguageFormProps {
   }>
 }
 
-// Función de utilidad para esperar un tiempo determinado
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-// Función para reintentar una operación con backoff exponencial
-async function retryOperation<T>(operation: () => Promise<T>, maxRetries = 3, initialDelay = 1000): Promise<T> {
-  let lastError: any
-
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      return await operation()
-    } catch (error) {
-      console.log(`Intento ${attempt + 1} fallido:`, error)
-      lastError = error
-
-      // Esperar con backoff exponencial antes de reintentar
-      const delay = initialDelay * Math.pow(2, attempt)
-      await sleep(delay)
-    }
-  }
-
-  throw lastError
-}
-
 export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
   const router = useRouter()
-  const [items, setItems] = useState<
-    Array<{
-      id: string
-      language: string
-      speaking_level: string
-      reading_level: string
-      writing_level: string
-      isDeleting?: boolean
-    }>
-  >([])
-  const [loading, setLoading] = useState(false)
-  const [isInitialized, setIsInitialized] = useState(false)
-  const { toast } = useToast()
-  const [retryCount, setRetryCount] = useState(0)
   const supabase = createClient()
 
-  // Cargar los idiomas al iniciar
+  // Configuración inicial de datos memoizada
+  const initialData = useMemo(() => [{
+    id: "",
+    language: "",
+    speaking_level: "",
+    reading_level: "",
+    writing_level: "",
+  }], [])
+
+  // Cache local de datos del formulario
+  const {
+    data: items,
+    updateData: setItems,
+    isDirty,
+    clearCache
+  } = useFormCache(initialData, {
+    formKey: 'languages',
+    userId,
+    autoSave: true
+  })
+
+  // Carga automática de datos desde la base de datos
+  const {
+    data: dbLanguages,
+    loading: loadingData,
+    error: dbError,
+    refetch: refetchLanguages
+  } = useDBData<any>({
+    userId,
+    table: 'languages',
+    enabled: !!userId
+  })
+
+  // Cargar datos existentes cuando estén disponibles
   useEffect(() => {
-    const loadLanguages = async () => {
-      try {
-        setLoading(true)
-        console.log("Cargando idiomas existentes para usuario:", userId)
-
-        const { data: existingLanguages, error: existingLanguagesError } = await supabase
-          .from("languages")
-          .select("*")
-          .eq("user_id", userId)
-
-        if (existingLanguagesError) {
-          console.error("Error fetching existing languages:", existingLanguagesError)
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Error al cargar los idiomas existentes",
-          })
-        } else if (existingLanguages && existingLanguages.length > 0) {
-          setItems(
-            existingLanguages.map((lang) => ({
-              id: lang.id || "",
-              language: lang.language || "",
-              speaking_level: lang.speaking_level || "",
-              reading_level: lang.reading_level || "",
-              writing_level: lang.writing_level || "",
-            })),
-          )
-          console.log("Datos de idiomas cargados exitosamente")
-        } else {
-          // Si no hay idiomas, inicializar con un elemento vacío
-          setItems([
-            {
-              id: "",
-              language: "",
-              speaking_level: "",
-              reading_level: "",
-              writing_level: "",
-            },
-          ])
-          console.log("No se encontraron idiomas existentes, formulario vacío")
-        }
-      } catch (error: any) {
-        console.error("Error al cargar idiomas:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Error al cargar los idiomas existentes",
-        })
-      } finally {
-        setLoading(false)
-        setIsInitialized(true)
-      }
+    if (dbLanguages && dbLanguages.length > 0 && items.length === 1 && !items[0].language) {
+      setItems(dbLanguages)
     }
+  }, [dbLanguages, items, setItems])
 
-    loadLanguages()
-  }, [userId])
+  const [loading, setLoading] = useState(false)
 
   const handleAddItem = () => {
-    setItems([
+    const newItems = [
       ...items,
       {
         id: "",
@@ -141,10 +85,23 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
         reading_level: "",
         writing_level: "",
       },
-    ])
+    ]
+    setItems(newItems)
   }
 
-  const handleItemChange = (index: number, field: string, value: any) => {
+  const handleRemoveItem = async (index: number) => {
+    try {
+      const newItems = [...items]
+      newItems.splice(index, 1)
+      setItems(newItems)
+      notifications.success.delete(`Idioma ${index + 1}`)
+    } catch (error) {
+      console.error("Error al eliminar idioma:", error)
+      notifications.error.delete("el idioma")
+    }
+  }
+
+  const handleItemChange = (index: number, field: string, value: string) => {
     const newItems = [...items]
     newItems[index] = { ...newItems[index], [field]: value }
     setItems(newItems)
@@ -152,145 +109,147 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (loading) return
+    
     setLoading(true)
 
     try {
-      // Validar que todos los campos requeridos estén completos
-      const incompleteItems = items.filter(
-        (item) => !item.language || !item.speaking_level || !item.reading_level || !item.writing_level,
+      // Validar que no haya campos obligatorios vacíos
+      const invalidItems = items.filter(item => 
+        !item.language.trim() || 
+        !item.speaking_level || 
+        !item.reading_level || 
+        !item.writing_level
       )
-
-      if (incompleteItems.length > 0) {
-        throw new Error("Por favor complete todos los campos requeridos en cada idioma")
+      
+      if (invalidItems.length > 0) {
+        notifications.error.validation("Por favor complete todos los campos: idioma y niveles de habla, lectura y escritura")
+        setLoading(false)
+        return
       }
 
-      // Crear un nuevo cliente Supabase para cada operación
-      const supabase = createClient()
+      // Obtener idiomas existentes para comparar
+      const { data: existingLanguages, error: fetchError } = await supabase
+        .from("languages")
+        .select("*")
+        .eq("user_id", userId)
 
-      // Eliminar todos los idiomas existentes para este usuario con reintentos
-      const { error: deleteError } = await retryOperation(async () => {
-        return await supabase.from("languages").delete().eq("user_id", userId)
+      if (fetchError) throw fetchError
+
+      // Preparar datos para upsert
+      const languageData = items.map((item) => {
+        // Buscar si ya existe un idioma similar
+        const existingItem = existingLanguages?.find(existing => 
+          existing.language === item.language
+        )
+
+        return {
+          id: existingItem?.id || item.id || undefined,
+          user_id: userId,
+          language: item.language,
+          speaking_level: item.speaking_level,
+          reading_level: item.reading_level,
+          writing_level: item.writing_level,
+        }
       })
 
-      if (deleteError) throw deleteError
+      // Filtrar duplicados
+      const uniqueLanguageData = languageData.filter((item, index, self) =>
+        index === self.findIndex((l) => l.language === item.language)
+      )
 
-      // Insertar los nuevos idiomas with reintentos
-      const languageData = items.map((item) => ({
-        user_id: userId,
-        language: item.language,
-        speaking_level: item.speaking_level,
-        reading_level: item.reading_level,
-        writing_level: item.writing_level,
-      }))
+      // Primero, eliminar idiomas que ya no están en la lista
+      const currentIds = uniqueLanguageData.map(item => item.id).filter(Boolean)
+      const existingIds = existingLanguages?.map(item => item.id) || []
+      const idsToDelete = existingIds.filter(id => !currentIds.includes(id))
 
-      const { error: insertError } = await retryOperation(async () => {
-        return await supabase.from("languages").insert(languageData)
-      })
+      if (idsToDelete.length > 0) {
+        const { error: deleteError } = await supabase
+          .from("languages")
+          .delete()
+          .in("id", idsToDelete)
+          if (deleteError) throw deleteError
+      }
 
-      if (insertError) throw insertError
+      console.log("=== DEBUG LANGUAGE SAVE ===")
+      console.log("userId:", userId)
+      console.log("items:", items)
+      console.log("items type:", typeof items)
+      console.log("items isArray:", Array.isArray(items))
+      console.log("languageData:", languageData)
+      console.log("uniqueLanguageData:", uniqueLanguageData)
+      console.log("=== END DEBUG ===")
 
-      // Actualizar el estado del perfil con reintentos
-      const { error: profileError } = await retryOperation(async () => {
-        return await supabase.from("profiles").update({ languages_completed: true }).eq("id", userId)
-      })
+      // Manejar el upsert de forma más robusta
+      for (const langData of uniqueLanguageData) {
+        if (langData.id) {
+          // Actualizar idioma existente
+          const { error } = await supabase
+            .from("languages")
+            .update(langData)
+            .eq("id", langData.id)
+          
+          if (error) throw error
+        } else {
+          // Insertar nuevo idioma
+          const { id, ...insertData } = langData
+          const { error } = await supabase
+            .from("languages")
+            .insert(insertData)
+          
+          if (error) throw error
+        }
+      }
+
+      // Update profile status
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ languages_completed: true })
+        .eq("id", userId)
 
       if (profileError) throw profileError
 
-      toast({
-        variant: "success",
-        title: "Éxito",
-        description: "Idiomas guardados correctamente",
-      })
+      // Limpiar cache después de guardar exitosamente
+      clearCache()
+      
+      // Refrescar datos de la base de datos
+      refetchLanguages()
+      
+      notifications.success.save("Información de idiomas")
 
-      // Refrescar la página después de un breve retraso
+      // Esperar un momento antes de refrescar
       setTimeout(() => {
         router.refresh()
-      }, 1500)
-    } catch (error: any) {
+      }, 1500)    } catch (error: any) {
       console.error("Error al guardar idiomas:", error)
-
-      // Manejar específicamente errores de rate limiting
-      if (error.message && error.message.includes("Too Many")) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Demasiadas solicitudes. Por favor, espere un momento e intente guardar nuevamente.",
-        })
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: error.message || "Error al guardar los idiomas",
-        })
+      
+      // Mostrar mensaje de error más amigable
+      let errorMessage = "Ocurrió un error inesperado al guardar la información de idiomas"
+      
+      if (error.message?.includes("duplicate key")) {
+        errorMessage = "Ya existe un registro de idioma similar"
+      } else if (error.message?.includes("network") || error.message?.includes("fetch")) {
+        errorMessage = "Error de conexión. Verifica tu internet e intenta nuevamente"
+      } else if (error.message?.includes("unauthorized") || error.message?.includes("permission")) {
+        errorMessage = "No tienes permisos para realizar esta acción"
+      } else if (error.message?.includes("column") || error.message?.includes("schema")) {
+        errorMessage = "Error en el sistema. Por favor contacta al administrador"
       }
+      
+      notifications.error.generic(errorMessage)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleRemoveItem = async (index: number) => {
-    try {
-      // Marcar el elemento como "eliminando" para UI
-      const updatedItems = [...items]
-      updatedItems[index] = { ...updatedItems[index], isDeleting: true }
-      setItems(updatedItems)
-
-      // Eliminar el elemento del estado local
-      const newItems = [...items]
-      newItems.splice(index, 1)
-
-      // Si no quedan elementos, añadir uno vacío
-      if (newItems.length === 0) {
-        newItems.push({
-          id: "",
-          language: "",
-          speaking_level: "",
-          reading_level: "",
-          writing_level: "",
-        })
-      }
-
-      setItems(newItems)
-
-      toast({
-        variant: "success",
-        title: "Éxito",
-        description: `Idioma ${index + 1} eliminado correctamente`,
-      })
-
-      // Refrescar la página después de un breve retraso
-      setTimeout(() => {
-        router.refresh()
-      }, 1000)
-    } catch (error: any) {
-      console.error("Error al eliminar el idioma:", error)
-
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: `Error al eliminar el idioma: ${error.message || "Error desconocido"}`,
-      })
-
-      // Quitar el estado "eliminando" si hay error
-      const updatedItems = [...items]
-      updatedItems[index] = { ...updatedItems[index], isDeleting: false }
-      setItems(updatedItems)
-    }
-  }
-
-  const levelOptions = [
-    { value: "R", label: "Regular (R)" },
-    { value: "B", label: "Bueno (B)" },
-    { value: "MB", label: "Muy Bueno (MB)" },
-  ]
-
-  // Mostrar un indicador de carga mientras se inicializa
-  if (!isInitialized) {
+  // Mostrar indicador de carga mientras se cargan los datos
+  if (loadingData) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Idiomas</CardTitle>
-          <CardDescription>Cargando información de idiomas...</CardDescription>
+          <CardDescription>Cargando información existente...</CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center p-6">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -303,12 +262,12 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
     <Card>
       <CardHeader>
         <CardTitle>Idiomas</CardTitle>
-        <CardDescription>Agregue los idiomas que conoce y su nivel de dominio</CardDescription>
+        <CardDescription>Seleccione los idiomas que domina y su nivel de competencia</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-6">
           {items.map((item, index) => (
-            <div key={index} className={`space-y-4 p-4 border rounded-lg ${item.isDeleting ? "opacity-50" : ""}`}>
+            <div key={index} className="space-y-4 p-4 border rounded-lg">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium">Idioma {index + 1}</h3>
                 {items.length > 1 && (
@@ -316,125 +275,146 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
                     onDelete={() => handleRemoveItem(index)}
                     itemName="idioma"
                     buttonSize="sm"
-                    variant="destructive"
+                    variant="ghost"
                     tableName="languages"
                     itemId={item.id}
                     userId={userId}
                     documentKey={`${userId}/language_${index}`}
                     onSuccess={() => {
-                      toast({
-                        variant: "success",
-                        title: "Éxito",
-                        description: `Idioma ${index + 1} eliminado correctamente`,
-                      })
+                      notifications.success.delete(`Idioma ${index + 1}`)
                     }}
                     onError={(error) => {
-                      toast({
-                        variant: "destructive",
-                        title: "Error",
-                        description: `Error al eliminar el idioma: ${error.message || "Error desconocido"}`,
-                      })
+                      notifications.error.delete("idioma", error.message)
                     }}
-                    disabled={loading || item.isDeleting}
                   />
                 )}
               </div>
 
-              <div className="space-y-2">
-                <ValidatedInput
-                  id={`language-${index}`}
-                  label="Idioma"
-                  value={item.language}
-                  onChange={(e) => handleItemChange(index, "language", e.target.value)}
-                  validationRules={[validationRules.required, validationRules.name]}
-                  sanitizer="name"
-                  required={true}
-                  disabled={loading || item.isDeleting}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                <div className="space-y-4">
-                  <Label>Nivel al Hablar *</Label>
-                  <RadioGroup
-                    value={item.speaking_level}
-                    onValueChange={(value) => handleItemChange(index, "speaking_level", value)}
-                    className="flex flex-col space-y-2"
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <ValidatedInput
+                    id={`language-${index}`}
+                    label="Idioma"
+                    value={item.language}
+                    onChange={(e) => handleItemChange(index, "language", e.target.value)}
+                    validationRules={[validationRules.required, validationRules.text]}
+                    sanitizer="text"
                     required
-                    disabled={loading || item.isDeleting}
-                  >
-                    {levelOptions.map((option) => (
-                      <div key={option.value} className="flex items-center space-x-2">
-                        <RadioGroupItem value={option.value} id={`speaking-${index}-${option.value}`} />
-                        <Label htmlFor={`speaking-${index}-${option.value}`}>{option.label}</Label>
-                      </div>
-                    ))}
-                  </RadioGroup>
+                    placeholder="Ej: Inglés, Francés, Alemán"
+                  />
                 </div>
 
-                <div className="space-y-4">
-                  <Label>Nivel al Leer *</Label>
-                  <RadioGroup
-                    value={item.reading_level}
-                    onValueChange={(value) => handleItemChange(index, "reading_level", value)}
-                    className="flex flex-col space-y-2"
-                    required
-                    disabled={loading || item.isDeleting}
-                  >
-                    {levelOptions.map((option) => (
-                      <div key={option.value} className="flex items-center space-x-2">
-                        <RadioGroupItem value={option.value} id={`reading-${index}-${option.value}`} />
-                        <Label htmlFor={`reading-${index}-${option.value}`}>{option.label}</Label>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  {/* Nivel de Habla */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium">Nivel de Habla</Label>
+                    <RadioGroup
+                      value={item.speaking_level}
+                      onValueChange={(value) => handleItemChange(index, "speaking_level", value)}
+                      required
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="basic" id={`speaking-basic-${index}`} />
+                        <Label htmlFor={`speaking-basic-${index}`} className="text-sm">Básico</Label>
                       </div>
-                    ))}
-                  </RadioGroup>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="intermediate" id={`speaking-intermediate-${index}`} />
+                        <Label htmlFor={`speaking-intermediate-${index}`} className="text-sm">Intermedio</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="advanced" id={`speaking-advanced-${index}`} />
+                        <Label htmlFor={`speaking-advanced-${index}`} className="text-sm">Avanzado</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="native" id={`speaking-native-${index}`} />
+                        <Label htmlFor={`speaking-native-${index}`} className="text-sm">Nativo</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  {/* Nivel de Lectura */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium">Nivel de Lectura</Label>
+                    <RadioGroup
+                      value={item.reading_level}
+                      onValueChange={(value) => handleItemChange(index, "reading_level", value)}
+                      required
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="basic" id={`reading-basic-${index}`} />
+                        <Label htmlFor={`reading-basic-${index}`} className="text-sm">Básico</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="intermediate" id={`reading-intermediate-${index}`} />
+                        <Label htmlFor={`reading-intermediate-${index}`} className="text-sm">Intermedio</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="advanced" id={`reading-advanced-${index}`} />
+                        <Label htmlFor={`reading-advanced-${index}`} className="text-sm">Avanzado</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="native" id={`reading-native-${index}`} />
+                        <Label htmlFor={`reading-native-${index}`} className="text-sm">Nativo</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  {/* Nivel de Escritura */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium">Nivel de Escritura</Label>
+                    <RadioGroup
+                      value={item.writing_level}
+                      onValueChange={(value) => handleItemChange(index, "writing_level", value)}
+                      required
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="basic" id={`writing-basic-${index}`} />
+                        <Label htmlFor={`writing-basic-${index}`} className="text-sm">Básico</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="intermediate" id={`writing-intermediate-${index}`} />
+                        <Label htmlFor={`writing-intermediate-${index}`} className="text-sm">Intermedio</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="advanced" id={`writing-advanced-${index}`} />
+                        <Label htmlFor={`writing-advanced-${index}`} className="text-sm">Avanzado</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="native" id={`writing-native-${index}`} />
+                        <Label htmlFor={`writing-native-${index}`} className="text-sm">Nativo</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
                 </div>
 
-                <div className="space-y-4">
-                  <Label>Nivel al Escribir *</Label>
-                  <RadioGroup
-                    value={item.writing_level}
-                    onValueChange={(value) => handleItemChange(index, "writing_level", value)}
-                    className="flex flex-col space-y-2"
-                    required
-                    disabled={loading || item.isDeleting}
-                  >
-                    {levelOptions.map((option) => (
-                      <div key={option.value} className="flex items-center space-x-2">
-                        <RadioGroupItem value={option.value} id={`writing-${index}-${option.value}`} />
-                        <Label htmlFor={`writing-${index}-${option.value}`}>{option.label}</Label>
-                      </div>
-                    ))}
-                  </RadioGroup>
+                {/* Subida de Documentos */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Certificado de Idioma (Opcional)</Label>                  <AutoDocumentUpload
+                    userId={userId}
+                    formType="language"
+                    itemIndex={index}
+                    documentType="language_certificate"
+                    label="Certificado de Idioma (Opcional)"
+                  />
                 </div>
-              </div>
-
-              <div className="space-y-4 mt-4">
-                <Label>Documento de Soporte *</Label>
-                <DocumentUpload
-                  userId={userId}
-                  documentType={`language_${index}`}
-                  itemId={`language_${index}`}
-                  label="Subir certificado de idioma"
-                />
               </div>
             </div>
           ))}
 
-          <Button type="button" variant="outline" className="w-full" onClick={handleAddItem} disabled={loading}>
-            <Plus className="h-4 w-4 mr-2" /> Agregar Idioma
+          <Button
+            type="button"
+            onClick={handleAddItem}
+            variant="outline"
+            className="w-full"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Agregar otro idioma
           </Button>
         </CardContent>
-        <CardFooter>
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? (
-              <>
-                <div className="animate-spin mr-2 h-4 w-4 border-2 border-white rounded-full border-t-transparent"></div>
-                Guardando...
-              </>
-            ) : (
-              "Guardar Idiomas"
-            )}
+
+        <CardFooter className="flex gap-4">
+          <Button type="submit" disabled={loading} className="flex-1">
+            {loading ? "Guardando..." : "Guardar Idiomas"}
           </Button>
         </CardFooter>
       </form>

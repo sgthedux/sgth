@@ -43,7 +43,9 @@ export const UserNav = memo(function UserNav({ user, isAdmin = false }: UserNavP
       }
 
       // Limpiar cualquier estado local o cookies si es necesario
-      localStorage.removeItem("supabase.auth.token")
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem("supabase.auth.token")
+      }
 
       // Pequeña pausa para asegurar que todo se procese
       await new Promise((resolve) => setTimeout(resolve, 300))

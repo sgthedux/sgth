@@ -284,10 +284,8 @@ export default async function AdminDashboardPage() {
                         >
                           <Avatar className="h-10 w-10 border">
                             <AvatarImage
-                              src={user.avatar_url || `/placeholder.svg?height=40&width=40&query=user`}
+                              src={user.avatar_url || "/placeholder-user.jpg"}
                               alt={user.full_name || user.email}
-                              width={40}
-                              height={40}
                             />
                             <AvatarFallback>
                               {user.full_name
@@ -419,10 +417,8 @@ export default async function AdminDashboardPage() {
                             <div className="flex items-center gap-2">
                               <Avatar className="h-8 w-8">
                                 <AvatarImage
-                                  src={user.avatar_url || "/placeholder.svg?height=32&width=32&query=person"}
+                                  src={user.avatar_url || "/placeholder-user.jpg"}
                                   alt={user.full_name || user.email}
-                                  width={32}
-                                  height={32}
                                 />
                                 <AvatarFallback>
                                   {user.full_name
@@ -536,8 +532,8 @@ function Avatar({ className, ...props }: React.ComponentProps<"div"> & { classNa
   return <div className={cn("relative h-10 w-10 rounded-full overflow-hidden", className)} {...props} />
 }
 
-function AvatarImage({ className, ...props }: React.ComponentProps<typeof Image> & { className?: string }) {
-  return <Image className={cn("aspect-square h-full w-full object-cover", className)} {...props} />
+function AvatarImage({ className, width = 40, height = 40, ...props }: React.ComponentProps<typeof Image> & { className?: string }) {
+  return <Image className={cn("aspect-square h-full w-full object-cover", className)} width={width} height={height} {...props} />
 }
 
 function AvatarFallback({ className, ...props }: React.ComponentProps<"div"> & { className?: string }) {

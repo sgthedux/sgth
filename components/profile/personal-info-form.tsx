@@ -1,23 +1,29 @@
-"use client"
+﻿"use client"
 
 import React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { ValidatedInput } from "@/components/ui/validated-input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { AlertCircle } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DocumentUpload } from "@/components/profile/document-upload"
+import { AutoDocumentUpload } from "@/components/profile/auto-document-upload"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Separator } from "@/components/ui/separator"
 import { DatePicker } from "@/components/date-picker"
 import { validationRules } from "@/lib/validations"
 import { useUser } from "@/hooks/use-user"
-import { useToast } from "@/components/ui/use-toast"
+import { useFormCache } from "@/hooks/use-form-cache"
+import { useDBData } from "@/hooks/use-db-data"
+import { notifications, formMessages } from "@/lib/notifications"
+import toast from "react-hot-toast"
 
 interface Props {
   userId: string
@@ -56,52 +62,95 @@ interface Props {
 
 export function PersonalInfoForm({ userId, initialData }: Props) {
   const { user } = useUser()
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [loadingData, setLoadingData] = useState(true)
   const [activeTab, setActiveTab] = useState("identification")
   const [documentTypes, setDocumentTypes] = useState<any[]>([])
   const [maritalStatusOptions, setMaritalStatusOptions] = useState<any[]>([])
   const [validationErrors, setValidationErrors] = useState<Record<string, string | null>>({})
 
-  const { toast } = useToast()
+  // Memorizar initialData para evitar re-renders
+  const stableInitialData = useMemo(() => initialData || {}, [JSON.stringify(initialData)])
 
-  // Identification data
-  const [firstSurname, setFirstSurname] = useState<string>("")
-  const [secondSurname, setSecondSurname] = useState<string>("")
-  const [firstName, setFirstName] = useState<string>("")
-  const [middleName, setMiddleName] = useState<string>("")
-  const [identificationType, setIdentificationType] = useState<string>("")
-  const [identificationNumber, setIdentificationNumber] = useState<string>("")
-  const [documentIssueDate, setDocumentIssueDate] = useState<string>("")
-  const [documentIssuePlace, setDocumentIssuePlace] = useState<string>("")
-  const [gender, setGender] = useState<string>("")
-  const [maritalStatus, setMaritalStatus] = useState<string>("")
-  const [nationality, setNationality] = useState<string>("")
-  const [country, setCountry] = useState<string>("")
+  // Initialize form data structure with useMemo to prevent recreation
+  const defaultFormData = useMemo(() => ({
+    first_surname: "",
+    second_surname: "",
+    first_name: "",
+    middle_name: "",
+    identification_type: "",
+    identification_number: "",
+    document_issue_date: "",
+    document_issue_place: "",
+    gender: "",
+    nationality: "Colombiana",
+    country: "Colombia",
+    marital_status: "",
+    military_booklet_type: "",
+    military_booklet_number: "",
+    military_district: "",
+    birth_date: "",
+    birth_country: "Colombia",
+    birth_state: "",
+    birth_city: "",
+    birth_municipality: "",
+    address: "",
+    institutional_address: "",
+    phone: "",
+    email: "",
+    institutional_email: "",
+    residence_country: "Colombia",
+    residence_state: "",
+    residence_city: "",
+    residence_municipality: "",
+    ...stableInitialData
+  }), [stableInitialData])
 
-  // Military service data
-  const [militaryBookletType, setMilitaryBookletType] = useState<string>("")
-  const [militaryBookletNumber, setMilitaryBookletNumber] = useState<string>("")
-  const [militaryDistrict, setMilitaryDistrict] = useState<string>("")
+  // Use form cache
+  const { data: formData, updateData, isDirty, clearCache } = useFormCache(
+    defaultFormData,
+    {
+      formKey: 'personal_info',
+      userId: userId,
+      autoSave: true,
+      autoSaveDelay: 3000
+    }
+  )
 
-  // Birth and contact data
-  const [birthDate, setBirthDate] = useState<string>("")
-  const [birthCountry, setBirthCountry] = useState<string>("")
-  const [birthState, setBirthState] = useState<string>("")
-  const [birthCity, setBirthCity] = useState<string>("")
-  const [birthMunicipality, setBirthMunicipality] = useState<string>("")
-  const [address, setAddress] = useState<string>("")
-  const [institutionalAddress, setInstitutionalAddress] = useState<string>("")
-  const [phone, setPhone] = useState<string>("")
-  const [email, setEmail] = useState<string>("")
-  const [institutionalEmail, setInstitutionalEmail] = useState<string>("")
-  const [residenceCountry, setResidenceCountry] = useState<string>("")
-  const [residenceState, setResidenceState] = useState<string>("")
-  const [residenceCity, setResidenceCity] = useState<string>("")
-  const [residenceMunicipality, setResidenceMunicipality] = useState<string>("")
+  // Load existing data from database
+  const { data: existingData, loading: loadingData } = useDBData<any>({
+    userId,
+    table: 'personal_info',
+    enabled: !!userId
+  })
 
-  const router = useRouter()
+  // Debug: Log data loading status
+  useEffect(() => {
+    console.log('🔍 Estado de carga de datos:', {
+      userId,
+      loadingData,
+      existingDataLength: existingData?.length || 0,
+      existingData: existingData?.[0] || null
+    })
+  }, [userId, loadingData, existingData])
+
   const supabase = createClient()
+
+  // Load existing data when available
+  useEffect(() => {
+    if (existingData && existingData.length > 0) {
+      const dbData = existingData[0]
+      console.log('🔍 Datos cargados desde la base de datos:', dbData)
+      console.log('📝 Datos actuales del formulario antes de la actualización:', formData)
+      
+      // Actualizar el formulario con los datos de la base de datos
+      updateData(dbData)
+      
+      console.log('✅ Formulario actualizado con datos de la base de datos')
+    } else {
+      console.log('ℹ️ No hay datos existentes en la base de datos para este usuario')
+    }
+  }, [existingData, updateData])
 
   // Función para manejar cambios de validación
   const handleValidationChange = React.useCallback(
@@ -119,100 +168,13 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
     [],
   )
 
-  // Verificar si el formulario es válido
-  const isFormValid = React.useMemo(() => {
-    const requiredFields = ["firstSurname", "firstName", "identificationType", "identificationNumber"]
-    const hasRequiredFields = requiredFields.every((field) => {
-      switch (field) {
-        case "firstSurname":
-          return firstSurname.trim() !== ""
-        case "firstName":
-          return firstName.trim() !== ""
-        case "identificationType":
-          return identificationType !== ""
-        case "identificationNumber":
-          return identificationNumber.trim() !== ""
-        default:
-          return true
-      }
+  // Helper function to update form data
+  const updateField = (field: string, value: any) => {
+    updateData({
+      ...formData,
+      [field]: value
     })
-
-    const hasValidationErrors = Object.values(validationErrors).some((error) => error !== null)
-    return hasRequiredFields && !hasValidationErrors
-  }, [firstSurname, firstName, identificationType, identificationNumber, validationErrors])
-
-  // Cargar datos existentes del usuario usando la API
-  useEffect(() => {
-    const loadExistingData = async () => {
-      if (!user?.id) return
-
-      try {
-        setLoadingData(true)
-        console.log("Cargando datos existentes para usuario:", user.id)
-
-        // Llamar a la API para obtener datos de información personal
-        const response = await fetch(`/api/profile-data?userId=${user.id}&type=personal_info`)
-
-        if (!response.ok) {
-          throw new Error(`Error ${response.status}: ${response.statusText}`)
-        }
-
-        const result = await response.json()
-        console.log("Respuesta de la API:", result)
-
-        if (result.data) {
-          const personalInfo = result.data
-          console.log("Datos de información personal:", personalInfo)
-
-          // Cargar datos existentes en el formulario
-          setFirstSurname(personalInfo.first_surname || "")
-          setSecondSurname(personalInfo.second_surname || "")
-          setFirstName(personalInfo.first_name || "")
-          setMiddleName(personalInfo.middle_name || "")
-          setIdentificationType(personalInfo.identification_type || "")
-          setIdentificationNumber(personalInfo.identification_number || "")
-          setDocumentIssueDate(personalInfo.document_issue_date || "")
-          setDocumentIssuePlace(personalInfo.document_issue_place || "")
-          setGender(personalInfo.gender || "")
-          setMaritalStatus(personalInfo.marital_status || "")
-          setNationality(personalInfo.nationality || "")
-          setCountry(personalInfo.country || "")
-          setMilitaryBookletType(personalInfo.military_booklet_type || "")
-          setMilitaryBookletNumber(personalInfo.military_booklet_number || "")
-          setMilitaryDistrict(personalInfo.military_district || "")
-          setBirthDate(personalInfo.birth_date || "")
-          setBirthCountry(personalInfo.birth_country || "")
-          setBirthState(personalInfo.birth_state || "")
-          setBirthCity(personalInfo.birth_city || "")
-          setBirthMunicipality(personalInfo.birth_municipality || "")
-          setAddress(personalInfo.address || "")
-          setInstitutionalAddress(personalInfo.institutional_address || "")
-          setPhone(personalInfo.phone || "")
-          setEmail(personalInfo.email || "")
-          setInstitutionalEmail(personalInfo.institutional_email || "")
-          setResidenceCountry(personalInfo.residence_country || "")
-          setResidenceState(personalInfo.residence_state || "")
-          setResidenceCity(personalInfo.residence_city || "")
-          setResidenceMunicipality(personalInfo.residence_municipality || "")
-
-          console.log("Datos cargados exitosamente en el formulario")
-        } else {
-          console.log("No se encontraron datos existentes, formulario vacío")
-        }
-      } catch (error) {
-        console.error("Error cargando datos existentes:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Error al cargar los datos existentes",
-        })
-      } finally {
-        setLoadingData(false)
-      }
-    }
-
-    loadExistingData()
-  }, [user?.id, toast])
+  }
 
   // Cargar catálogos
   useEffect(() => {
@@ -244,113 +206,100 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!isFormValid) {
-      // Identificar campos faltantes
-      const missingFields = []
-      if (!firstSurname.trim()) missingFields.push("Primer Apellido")
-      if (!firstName.trim()) missingFields.push("Primer Nombre")
-      if (!identificationType) missingFields.push("Tipo de Documento")
-      if (!identificationNumber.trim()) missingFields.push("Número de Identificación")
-
-      const missingFieldsText =
-        missingFields.length > 1
-          ? `${missingFields.slice(0, -1).join(", ")} y ${missingFields[missingFields.length - 1]}`
-          : missingFields[0]
-
-      toast({
-        variant: "destructive",
-        title: "Campos obligatorios faltantes",
-        description: `Por favor complete: ${missingFieldsText}`,
-      })
-      return
-    }
+    // Prevenir múltiples envíos
+    if (loading) return
 
     setLoading(true)
 
     try {
-      const personalInfoData = {
-        user_id: userId,
-        first_surname: firstSurname,
-        second_surname: secondSurname,
-        first_name: firstName,
-        middle_name: middleName,
-        identification_type: identificationType,
-        identification_number: identificationNumber,
-        document_issue_date: documentIssueDate,
-        document_issue_place: documentIssuePlace,
-        gender,
-        marital_status: maritalStatus,
-        nationality,
-        country,
-        military_booklet_type: militaryBookletType,
-        military_booklet_number: militaryBookletNumber,
-        military_district: militaryDistrict,
-        birth_date: birthDate,
-        birth_country: birthCountry,
-        birth_state: birthState,
-        birth_city: birthCity,
-        birth_municipality: birthMunicipality,
-        address,
-        institutional_address: institutionalAddress,
-        phone,
-        email,
-        institutional_email: institutionalEmail,
-        residence_country: residenceCountry,
-        residence_state: residenceState,
-        residence_city: residenceCity,
-        residence_municipality: residenceMunicipality,
+      const targetUserId = userId || user?.id
+      if (!targetUserId) {
+        notifications.error.validation("No se pudo identificar el usuario")
+        setLoading(false)
+        return
       }
 
-      // Verificar si ya existe información personal
-      const { data: existingData, error: fetchError } = await supabase
+      // Validar campos obligatorios usando formData
+      if (!formData.first_surname?.trim() || !formData.first_name?.trim() || 
+          !formData.identification_type || !formData.identification_number?.trim()) {
+        notifications.error.validation("Por favor complete todos los campos obligatorios: primer apellido, primer nombre, tipo de documento y número de documento")
+        setLoading(false)
+        return
+      }
+
+      const personalInfoData = {
+        user_id: targetUserId,
+        ...formData
+      }
+
+      console.log("=== DEBUG PERSONAL INFO SAVE ===")
+      console.log("targetUserId:", targetUserId)
+      console.log("formData:", formData)
+      console.log("personalInfoData:", personalInfoData)
+      console.log("personalInfoData keys:", Object.keys(personalInfoData))
+      console.log("=== END DEBUG ===")
+
+      // Verificar si ya existe un registro para este usuario
+      const { data: existingRecord, error: checkError } = await supabase
         .from("personal_info")
-        .select("*")
-        .eq("user_id", userId)
+        .select("id")
+        .eq("user_id", targetUserId)
         .maybeSingle()
 
-      if (fetchError && !fetchError.message.includes("No rows found")) {
-        throw fetchError
+      if (checkError) {
+        console.error("Error al verificar registro existente:", checkError)
+        throw checkError
       }
 
-      let error
-
-      if (existingData) {
-        const { error: updateError } = await supabase
+      let upsertError: any = null
+      
+      if (existingRecord) {
+        // Actualizar registro existente
+        const { error } = await supabase
           .from("personal_info")
           .update(personalInfoData)
-          .eq("user_id", userId)
-
-        error = updateError
+          .eq("user_id", targetUserId)
+        upsertError = error
       } else {
-        const { error: insertError } = await supabase.from("personal_info").insert(personalInfoData)
-
-        error = insertError
+        // Insertar nuevo registro
+        const { error } = await supabase
+          .from("personal_info")
+          .insert(personalInfoData)
+        upsertError = error
       }
 
-      if (error) throw error
+      if (upsertError) throw upsertError
 
       // Actualizar el perfil para marcar como completado
       const { error: profileError } = await supabase
         .from("profiles")
         .update({ personal_info_completed: true })
-        .eq("id", userId)
+        .eq("id", targetUserId)
 
-      if (profileError) throw profileError
+      if (profileError) throw profileError      // Limpiar cache después de guardar exitosamente
+      clearCache()
 
       // Mostrar mensaje de éxito
-      toast({
-        variant: "success",
-        title: "Éxito",
-        description: "Información personal guardada correctamente",
-      })
+      notifications.success.save("Información personal")
 
       router.refresh()
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Error al guardar la información personal",
-      })
+      console.error("Error al guardar información personal:", error)
+      
+      // Mostrar mensaje de error más amigable
+      let errorMessage = "Ocurrió un error inesperado al guardar la información"
+      
+      if (error.message?.includes("duplicate key")) {
+        errorMessage = "Ya existe un registro con esta información"
+      } else if (error.message?.includes("network") || error.message?.includes("fetch")) {
+        errorMessage = "Error de conexión. Verifica tu internet e intenta nuevamente"
+      } else if (error.message?.includes("unauthorized") || error.message?.includes("permission")) {
+        errorMessage = "No tienes permisos para realizar esta acción"
+      } else if (error.message?.includes("column") || error.message?.includes("schema")) {
+        errorMessage = "Error en el sistema. Por favor contacta al administrador"
+      }
+      
+      notifications.error.generic(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -386,6 +335,25 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
       <CardHeader>
         <CardTitle>Datos Personales</CardTitle>
         <CardDescription>Ingrese su información personal completa</CardDescription>
+        {/* Indicador de estado de datos */}
+        {loadingData && (
+          <div className="text-sm text-blue-600 flex items-center gap-2">
+            <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+            Cargando datos existentes...
+          </div>
+        )}
+        {!loadingData && existingData && existingData.length > 0 && (
+          <div className="text-sm text-green-600 flex items-center gap-2">
+            <div className="h-2 w-2 bg-green-600 rounded-full"></div>
+            Datos cargados desde la base de datos
+          </div>
+        )}
+        {!loadingData && (!existingData || existingData.length === 0) && (
+          <div className="text-sm text-gray-500 flex items-center gap-2">
+            <div className="h-2 w-2 bg-gray-400 rounded-full"></div>
+            No hay datos previos - Nuevo registro
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -404,22 +372,20 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 <ValidatedInput
                   id="first-surname"
                   label="Primer Apellido"
-                  value={firstSurname}
-                  onChange={(e) => setFirstSurname(e.target.value)}
+                  value={formData.first_surname || ""}
+                  onChange={(e) => updateField("first_surname", e.target.value)}
                   validationRules={[validationRules.required, validationRules.name]}
                   sanitizer="name"
-                  onValidationChange={handleValidationChange("firstSurname")}
-                  required={true}
+                  required
                 />
 
                 <ValidatedInput
                   id="second-surname"
                   label="Segundo Apellido"
-                  value={secondSurname}
-                  onChange={(e) => setSecondSurname(e.target.value)}
+                  value={formData.second_surname || ""}
+                  onChange={(e) => updateField("second_surname", e.target.value)}
                   validationRules={[validationRules.name]}
                   sanitizer="name"
-                  onValidationChange={handleValidationChange("secondSurname")}
                 />
               </div>
 
@@ -427,32 +393,31 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 <ValidatedInput
                   id="first-name"
                   label="Primer Nombre"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
+                  value={formData.first_name || ""}
+                  onChange={(e) => updateField("first_name", e.target.value)}
                   validationRules={[validationRules.required, validationRules.name]}
                   sanitizer="name"
-                  onValidationChange={handleValidationChange("firstName")}
-                  required={true}
+                  required
                 />
 
                 <ValidatedInput
                   id="middle-name"
                   label="Segundo Nombre"
-                  value={middleName}
-                  onChange={(e) => setMiddleName(e.target.value)}
+                  value={formData.middle_name || ""}
+                  onChange={(e) => updateField("middle_name", e.target.value)}
                   validationRules={[validationRules.name]}
                   sanitizer="name"
-                  onValidationChange={handleValidationChange("middleName")}
                 />
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label className="text-base font-semibold text-gray-700 after:content-['*'] after:text-red-500 after:ml-1">
+                  <Label className="text-base font-semibold text-foreground">
                     Tipo de Documento
+                    <span className="text-red-500 ml-1">*</span>
                   </Label>
-                  <Select value={identificationType} onValueChange={setIdentificationType} required>
-                    <SelectTrigger className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm">
+                  <Select value={formData.identification_type || ""} onValueChange={(value) => updateField("identification_type", value)} required>
+                    <SelectTrigger className="border-2 border-input bg-background rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-400 shadow-sm">
                       <SelectValue placeholder="Seleccione un tipo" />
                     </SelectTrigger>
                     <SelectContent>
@@ -468,22 +433,22 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 <ValidatedInput
                   id="identification-number"
                   label="Número de Identificación"
-                  value={identificationNumber}
-                  onChange={(e) => setIdentificationNumber(e.target.value)}
+                  value={formData.identification_number || ""}
+                  onChange={(e) => updateField("identification_number", e.target.value)}
                   validationRules={[validationRules.required, validationRules.identification]}
                   sanitizer="identification"
-                  onValidationChange={handleValidationChange("identificationNumber")}
-                  required={true}
+                  required
                 />
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label className="text-base font-semibold text-gray-700">Fecha de Expedición</Label>
+                  <Label className="text-base font-semibold text-foreground">Fecha de Expedición</Label>
                   <DatePicker
                     id="document-issue-date"
-                    value={documentIssueDate}
-                    onChange={setDocumentIssueDate}
+                    label=""
+                    value={formData.document_issue_date || ""}
+                    onChange={(date) => updateField("document_issue_date", date || "")}
                     required
                     maxDate={new Date().toISOString().split("T")[0]}
                   />
@@ -492,23 +457,34 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 <ValidatedInput
                   id="document-issue-place"
                   label="Lugar de Expedición"
-                  value={documentIssuePlace}
-                  onChange={(e) => setDocumentIssuePlace(e.target.value)}
+                  value={formData.document_issue_place || ""}
+                  onChange={(e) => updateField("document_issue_place", e.target.value)}
                   validationRules={[validationRules.required, validationRules.text]}
                   sanitizer="text"
-                  onValidationChange={handleValidationChange("documentIssuePlace")}
                   required
                 />
               </div>
 
               <div className="space-y-4">
-                <DocumentUpload userId={userId} documentType="identification" label="Subir documento de identidad" />
+                <AutoDocumentUpload
+                  userId={userId}
+                  documentType="identification_document"
+                  formType="personal_info"
+                  label="Documento de Identidad"
+                  required
+                  onUploadSuccess={(url) => {
+                    console.log("Documento de identidad subido exitosamente:", url)
+                  }}
+                  onUploadError={(error) => {
+                    console.error("Error al subir documento de identidad:", error)
+                  }}
+                />
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="space-y-2">
-                  <Label className="text-base font-semibold text-gray-700">Sexo</Label>
-                  <RadioGroup value={gender} onValueChange={setGender} className="flex space-x-4">
+                  <Label className="text-base font-semibold text-foreground">Sexo</Label>
+                  <RadioGroup value={formData.gender || ""} onValueChange={(value) => updateField("gender", value)} className="flex space-x-4">
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem
                         className="h-5 w-5 border-2 border-gray-400 text-blue-600"
@@ -529,9 +505,9 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-base font-semibold text-gray-700">Estado Civil</Label>
-                  <Select value={maritalStatus} onValueChange={setMaritalStatus} required>
-                    <SelectTrigger className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm">
+                  <Label className="text-base font-semibold text-foreground">Estado Civil</Label>
+                  <Select value={formData.marital_status || ""} onValueChange={(value) => updateField("marital_status", value)} required>
+                    <SelectTrigger className="border-2 border-input bg-background rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-400 shadow-sm">
                       <SelectValue placeholder="Seleccione estado civil" />
                     </SelectTrigger>
                     <SelectContent>
@@ -545,8 +521,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-base font-semibold text-gray-700">Nacionalidad</Label>
-                  <RadioGroup value={nationality} onValueChange={setNationality} className="flex space-x-4">
+                  <Label className="text-base font-semibold text-foreground">Nacionalidad</Label>
+                  <RadioGroup value={formData.nationality || ""} onValueChange={(value) => updateField("nationality", value)} className="flex space-x-4">
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem
                         className="h-5 w-5 border-2 border-gray-400 text-blue-600"
@@ -570,8 +546,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
               <ValidatedInput
                 id="country"
                 label="País"
-                value={country}
-                onChange={(e) => setCountry(e.target.value)}
+                value={formData.country || ""}
+                onChange={(e) => updateField("country", e.target.value)}
                 validationRules={[validationRules.text]}
                 sanitizer="text"
                 onValidationChange={handleValidationChange("country")}
@@ -592,9 +568,9 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="space-y-2">
-                  <Label className="text-base font-semibold text-gray-700">Tipo</Label>
-                  <Select value={militaryBookletType} onValueChange={setMilitaryBookletType}>
-                    <SelectTrigger className="border-2 border-gray-300 bg-gray-50 rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm">
+                  <Label className="text-base font-semibold text-foreground">Tipo</Label>
+                  <Select value={formData.military_booklet_type || ""} onValueChange={(value) => updateField("military_booklet_type", value)}>
+                    <SelectTrigger className="border-2 border-input bg-background rounded-md px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-400 shadow-sm">
                       <SelectValue placeholder="Seleccione un tipo" />
                     </SelectTrigger>
                     <SelectContent>
@@ -605,13 +581,13 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                   </Select>
                 </div>
 
-                {militaryBookletType !== "No Aplica" && (
+                {(formData.military_booklet_type || "") !== "No Aplica" && (
                   <>
                     <ValidatedInput
                       id="military-booklet-number"
                       label="Número"
-                      value={militaryBookletNumber}
-                      onChange={(e) => setMilitaryBookletNumber(e.target.value)}
+                      value={formData.military_booklet_number || ""}
+                      onChange={(e) => updateField("military_booklet_number", e.target.value)}
                       validationRules={[validationRules.alphanumeric]}
                       sanitizer="alphanumeric"
                       onValidationChange={handleValidationChange("militaryBookletNumber")}
@@ -620,8 +596,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                     <ValidatedInput
                       id="military-district"
                       label="Distrito Militar (D.M)"
-                      value={militaryDistrict}
-                      onChange={(e) => setMilitaryDistrict(e.target.value)}
+                      value={formData.military_district || ""}
+                      onChange={(e) => updateField("military_district", e.target.value)}
                       validationRules={[validationRules.alphanumeric]}
                       sanitizer="alphanumeric"
                       onValidationChange={handleValidationChange("militaryDistrict")}
@@ -630,9 +606,21 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 )}
               </div>
 
-              {militaryBookletType !== "No Aplica" && (
+              {(formData.military_booklet_type || "") !== "No Aplica" && (
                 <div className="space-y-4">
-                  <DocumentUpload userId={userId} documentType="military_booklet" label="Subir libreta militar" />
+                  <AutoDocumentUpload
+                    userId={userId}
+                    documentType="military_booklet"
+                    formType="personal_info"
+                    label="Libreta Militar"
+                    required
+                    onUploadSuccess={(url) => {
+                      console.log("Libreta militar subida exitosamente:", url)
+                    }}
+                    onUploadError={(error) => {
+                      console.error("Error al subir libreta militar:", error)
+                    }}
+                  />
                 </div>
               )}
 
@@ -652,11 +640,12 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
               <h3 className="text-lg font-medium">Nacimiento y Contacto</h3>
 
               <div className="space-y-2">
-                <Label className="text-base font-semibold text-gray-700">Fecha de Nacimiento</Label>
+                <Label className="text-base font-semibold text-foreground">Fecha de Nacimiento</Label>
                 <DatePicker
                   id="birth-date"
-                  value={birthDate}
-                  onChange={setBirthDate}
+                  label=""
+                  value={formData.birth_date || ""}
+                  onChange={(date) => updateField("birth_date", date || "")}
                   required
                   maxDate={new Date().toISOString().split("T")[0]}
                 />
@@ -666,8 +655,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 <ValidatedInput
                   id="birth-country"
                   label="País de Nacimiento"
-                  value={birthCountry}
-                  onChange={(e) => setBirthCountry(e.target.value)}
+                  value={formData.birth_country || ""}
+                  onChange={(e) => updateField("birth_country", e.target.value)}
                   validationRules={[validationRules.required, validationRules.text]}
                   sanitizer="text"
                   onValidationChange={handleValidationChange("birthCountry")}
@@ -677,8 +666,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 <ValidatedInput
                   id="birth-state"
                   label="Departamento de Nacimiento"
-                  value={birthState}
-                  onChange={(e) => setBirthState(e.target.value)}
+                  value={formData.birth_state ?? ""}
+                  onChange={(e) => updateField("birth_state", e.target.value)}
                   validationRules={[validationRules.required, validationRules.text]}
                   sanitizer="text"
                   onValidationChange={handleValidationChange("birthState")}
@@ -688,8 +677,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 <ValidatedInput
                   id="birth-city"
                   label="Municipio de Nacimiento"
-                  value={birthCity}
-                  onChange={(e) => setBirthCity(e.target.value)}
+                  value={formData.birth_city ?? ""}
+                  onChange={(e) => updateField("birth_city", e.target.value)}
                   validationRules={[validationRules.required, validationRules.text]}
                   sanitizer="text"
                   onValidationChange={handleValidationChange("birthCity")}
@@ -700,8 +689,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
               <ValidatedInput
                 id="birth-municipality"
                 label="Código DANE Municipio de Nacimiento"
-                value={birthMunicipality}
-                onChange={(e) => setBirthMunicipality(e.target.value)}
+                value={formData.birth_municipality ?? ""}
+                onChange={(e) => updateField("birth_municipality", e.target.value)}
                 validationRules={[validationRules.numbers]}
                 sanitizer="numbers"
                 onValidationChange={handleValidationChange("birthMunicipality")}
@@ -713,8 +702,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
               <ValidatedInput
                 id="address"
                 label="Dirección Personal"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                value={formData.address ?? ""}
+                onChange={(e) => updateField("address", e.target.value)}
                 validationRules={[validationRules.required, validationRules.text]}
                 sanitizer="text"
                 onValidationChange={handleValidationChange("address")}
@@ -724,8 +713,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
               <ValidatedInput
                 id="institutional-address"
                 label="Dirección Institucional"
-                value={institutionalAddress}
-                onChange={(e) => setInstitutionalAddress(e.target.value)}
+                value={formData.institutional_address ?? ""}
+                onChange={(e) => updateField("institutional_address", e.target.value)}
                 validationRules={[validationRules.text]}
                 sanitizer="text"
                 onValidationChange={handleValidationChange("institutionalAddress")}
@@ -736,8 +725,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                   id="phone"
                   label="Teléfono"
                   type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  value={formData.phone ?? ""}
+                  onChange={(e) => updateField("phone", e.target.value)}
                   validationRules={[validationRules.required, validationRules.phone]}
                   onValidationChange={handleValidationChange("phone")}
                   required
@@ -747,8 +736,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                   id="email"
                   label="Correo Electrónico Personal"
                   type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={formData.email ?? ""}
+                  onChange={(e) => updateField("email", e.target.value)}
                   validationRules={[validationRules.required, validationRules.email]}
                   onValidationChange={handleValidationChange("email")}
                   required
@@ -759,8 +748,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 id="institutional-email"
                 label="Correo Electrónico Institucional"
                 type="email"
-                value={institutionalEmail}
-                onChange={(e) => setInstitutionalEmail(e.target.value)}
+                value={formData.institutional_email ?? ""}
+                onChange={(e) => updateField("institutional_email", e.target.value)}
                 validationRules={[validationRules.email]}
                 onValidationChange={handleValidationChange("institutionalEmail")}
               />
@@ -769,8 +758,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 <ValidatedInput
                   id="residence-country"
                   label="País de Residencia"
-                  value={residenceCountry}
-                  onChange={(e) => setResidenceCountry(e.target.value)}
+                  value={formData.residence_country ?? ""}
+                  onChange={(e) => updateField("residence_country", e.target.value)}
                   validationRules={[validationRules.required, validationRules.text]}
                   sanitizer="text"
                   onValidationChange={handleValidationChange("residenceCountry")}
@@ -780,8 +769,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 <ValidatedInput
                   id="residence-state"
                   label="Departamento de Residencia"
-                  value={residenceState}
-                  onChange={(e) => setResidenceState(e.target.value)}
+                  value={formData.residence_state ?? ""}
+                  onChange={(e) => updateField("residence_state", e.target.value)}
                   validationRules={[validationRules.required, validationRules.text]}
                   sanitizer="text"
                   onValidationChange={handleValidationChange("residenceState")}
@@ -791,8 +780,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 <ValidatedInput
                   id="residence-city"
                   label="Municipio de Residencia"
-                  value={residenceCity}
-                  onChange={(e) => setResidenceCity(e.target.value)}
+                  value={formData.residence_city ?? ""}
+                  onChange={(e) => updateField("residence_city", e.target.value)}
                   validationRules={[validationRules.required, validationRules.text]}
                   sanitizer="text"
                   onValidationChange={handleValidationChange("residenceCity")}
@@ -803,8 +792,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
               <ValidatedInput
                 id="residence-municipality"
                 label="Código DANE Municipio de Residencia"
-                value={residenceMunicipality}
-                onChange={(e) => setResidenceMunicipality(e.target.value)}
+                value={formData.residence_municipality ?? ""}
+                onChange={(e) => updateField("residence_municipality", e.target.value)}
                 validationRules={[validationRules.numbers]}
                 sanitizer="numbers"
                 onValidationChange={handleValidationChange("residenceMunicipality")}
@@ -817,31 +806,8 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
                 </Button>
                 <Button
                   type="button"
-                  onClick={
-                    isFormValid
-                      ? handleSubmit
-                      : () => {
-                          // Identificar campos faltantes cuando el botón está desactivado
-                          const missingFields = []
-                          if (!firstSurname.trim()) missingFields.push("Primer Apellido")
-                          if (!firstName.trim()) missingFields.push("Primer Nombre")
-                          if (!identificationType) missingFields.push("Tipo de Documento")
-                          if (!identificationNumber.trim()) missingFields.push("Número de Identificación")
-
-                          const missingFieldsText =
-                            missingFields.length > 1
-                              ? `${missingFields.slice(0, -1).join(", ")} y ${missingFields[missingFields.length - 1]}`
-                              : missingFields[0]
-
-                          toast({
-                            variant: "destructive",
-                            title: "No se puede guardar",
-                            description: `Faltan campos obligatorios: ${missingFieldsText}`,
-                          })
-                        }
-                  }
+                  onClick={handleSubmit}
                   disabled={loading}
-                  className={!isFormValid ? "opacity-50 cursor-pointer" : ""}
                 >
                   {loading ? "Guardando..." : "Guardar Información Personal"}
                 </Button>
@@ -853,3 +819,4 @@ export function PersonalInfoForm({ userId, initialData }: Props) {
     </Card>
   )
 }
+

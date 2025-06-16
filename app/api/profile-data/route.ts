@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User ID is required" }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = createClient()
 
     // Verificar que el usuario esté autenticado
     const {

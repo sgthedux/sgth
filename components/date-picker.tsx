@@ -66,7 +66,10 @@ export function DatePicker({
 
   return (
     <div className={`space-y-2 ${className}`}>
-      <Label htmlFor={id}>{label}</Label>
+      <Label htmlFor={id}>
+        {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
+      </Label>
       <input
         type="date"
         id={id}

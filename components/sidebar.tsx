@@ -17,6 +17,8 @@ import {
   Menu,
   X,
   FolderOpen,
+  ClipboardCheck,
+  UserCheck,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -28,9 +30,10 @@ import Image from "next/image"
 
 interface SidebarProps {
   isAdmin?: boolean
+  isRH?: boolean
 }
 
-export function Sidebar({ isAdmin = false }: SidebarProps) {
+export function Sidebar({ isAdmin = false, isRH = false }: SidebarProps) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const router = useRouter()
@@ -55,20 +58,26 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
 
         if (!session || !isMounted) return
 
-        const { data } = await supabase.from("profiles").select("role").eq("id", session.user.id).single()
+        // Usar el cliente seguro para obtener el rol
+        const { secureDB } = await import("@/lib/supabase/secure-client")
+        const profileData = await secureDB.getProfile(session.user.id)
 
         if (!isMounted) return
 
-        setUserRole(data?.role || null)
+        setUserRole(profileData?.role || "user")
 
         // Redirigir si el rol no coincide con la sección
-        if (data?.role === "admin" && !isAdmin) {
+        if (profileData?.role === "admin" && !isAdmin && !isRH) {
           router.push("/admin/dashboard")
-        } else if (data?.role !== "admin" && isAdmin) {
+        } else if (profileData?.role === "rh" && !isRH && !isAdmin) {
+          router.push("/rh/dashboard")
+        } else if (profileData?.role === "user" && (isAdmin || isRH)) {
           router.push("/dashboard")
         }
       } catch (error) {
         console.error("Error checking user role:", error)
+        // En caso de error, asumir usuario regular
+        setUserRole("user")
       } finally {
         if (isMounted) {
           setLoading(false)
@@ -81,7 +90,7 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
     return () => {
       isMounted = false
     }
-  }, [isAdmin, router, supabase, loading])
+  }, [isAdmin, isRH, router, supabase, loading])
 
   // Cerrar el sidebar en pantallas pequeñas cuando cambia la ruta
   useEffect(() => {
@@ -118,8 +127,10 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
       }
 
       // Limpiar localStorage
-      localStorage.removeItem("supabase.auth.token")
-      localStorage.removeItem("supabase.auth.expires_at")
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem("supabase.auth.token")
+        localStorage.removeItem("supabase.auth.expires_at")
+      }
 
       // Pequeña pausa para asegurar que todo se limpie
       await new Promise((resolve) => setTimeout(resolve, 100))
@@ -213,7 +224,31 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
     },
   ]
 
-  const routes = isAdmin ? adminRoutes : userRoutes
+  const rhRoutes = [
+    {
+      title: "Dashboard",
+      href: "/rh/dashboard",
+      icon: <LayoutDashboard className="h-5 w-5" />,
+    },
+    {
+      title: "Solicitudes de Licencias",
+      href: "/rh/licenses",
+      icon: <ClipboardCheck className="h-5 w-5" />,
+    },
+    {
+      title: "Gestión de Personal",
+      href: "/rh/staff",
+      icon: <UserCheck className="h-5 w-5" />,
+    },
+    {
+      title: "Reportes",
+      href: "/rh/reports",
+      icon: <BarChart className="h-5 w-5" />,
+    },
+  ]
+
+  const routes = isRH ? rhRoutes : isAdmin ? adminRoutes : userRoutes
+  const basePath = isRH ? "/rh/dashboard" : isAdmin ? "/admin/dashboard" : "/dashboard"
 
   return (
     <>
@@ -228,11 +263,13 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
         <SheetContent side="left" className="p-0 w-64">
           <MobileSidebar
             isAdmin={isAdmin}
+            isRH={isRH}
             onSignOut={handleSignOut}
             routes={routes}
             activeGroup={activeGroup}
             toggleGroup={toggleGroup}
             isSigningOut={isSigningOut}
+            basePath={basePath}
           />
         </SheetContent>
       </Sheet>
@@ -241,7 +278,7 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
       <div className="hidden md:flex h-screen w-64 flex-col fixed inset-y-0 z-50">
         <div className="flex flex-col h-full bg-card border-r shadow-sm">
           <div className="h-16 flex items-center px-6 border-b">
-            <Link href={isAdmin ? "/admin/dashboard" : "/dashboard"} className="flex items-center gap-2">
+            <Link href={basePath} className="flex items-center gap-2">
               <div className="flex items-center">
                 <Image
                   src="/images/logo.png"
@@ -343,25 +380,29 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
 
 const MobileSidebar = memo(function MobileSidebar({
   isAdmin = false,
+  isRH = false,
   onSignOut,
   routes,
   activeGroup,
   toggleGroup,
   isSigningOut = false,
+  basePath,
 }: {
   isAdmin?: boolean
+  isRH?: boolean
   onSignOut: () => void
   routes: any[]
   activeGroup: string | null
   toggleGroup: (title: string) => void
   isSigningOut?: boolean
+  basePath: string
 }) {
   const pathname = usePathname()
 
   return (
     <div className="flex flex-col h-full bg-card">
       <div className="h-16 flex items-center justify-between px-6 border-b">
-        <Link href={isAdmin ? "/admin/dashboard" : "/dashboard"} className="flex items-center gap-2">
+        <Link href={basePath} className="flex items-center gap-2">
           <Image src="/images/logo.png" alt="Utedé Logo" width={120} height={40} className="object-contain" priority />
         </Link>
         <SheetTrigger asChild>
