@@ -43,3 +43,6 @@ export async function createClient() {
     },
   })
 }
+
+// Exportación adicional para compatibilidad
+export const createServiceClient = createClient

@@ -1,7 +1,7 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
 // Cliente administrativo para operaciones que requieren permisos elevados
-export const supabaseAdmin = createClient(
+export const supabaseAdmin = createSupabaseClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
   {
@@ -45,3 +45,8 @@ export async function getProfileForAdmin(userId: string) {
     return null
   }
 }
+
+// Exportaciones adicionales para compatibilidad
+export const createAdminClient = () => supabaseAdmin
+export const createClient = () => supabaseAdmin
+export { supabaseAdmin as default }
