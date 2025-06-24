@@ -52,13 +52,20 @@ interface LicenseRequest {
   radicado: string
   nombres: string
   apellidos: string
-  tipo_documento: string
+  tipo_documento?: string
   numero_documento: string
+  area_trabajo?: string
   cargo: string
+  codigo_tipo_permiso: string
   fecha_inicio: string
   fecha_finalizacion: string
+  hora_inicio?: string
+  hora_fin?: string
+  fecha_compensacion?: string
+  reemplazo: boolean
+  reemplazante?: string
   observacion?: string
-  estado: "pendiente" | "en_revision" | "aprobada" | "rechazada"
+  estado: "pendiente" | "en_revision" | "aprobada" | "rechazada" | "cancelada"
   comentarios_rh?: string
   created_at: string
   updated_at: string
@@ -67,6 +74,9 @@ interface LicenseRequest {
     file_name: string
     file_url: string
   }>
+  // Campos calculados de la vista
+  tipo_permiso_nombre?: string
+  estado_nombre?: string
 }
 
 const estadoConfig = {
@@ -93,6 +103,12 @@ const estadoConfig = {
     variant: "outline" as const,
     icon: XCircle,
     className: "border-red-200 bg-red-50 text-red-700 hover:bg-red-100",
+  },
+  cancelada: {
+    label: "Cancelada",
+    variant: "outline" as const,
+    icon: XCircle,
+    className: "border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100",
   },
 }
 
@@ -150,40 +166,42 @@ export default function LicensesPage() {
     } finally {
       setLoading(false)
     }
-  }
-  async function updateLicenseStatus(licenseId: string, newStatus: string, comments?: string) {
+  }  async function updateLicenseStatus(licenseId: string, newStatus: string, comments?: string) {
     try {
-      const { error } = await supabase
-        .from("license_requests")
-        .update({ 
-          estado: newStatus,
-          comentarios_rh: comments,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", licenseId)
+      console.log(`🔄 Actualizando estado de licencia ${licenseId} a: ${newStatus}`)
 
-      if (error) {
-        console.error("Error updating license status:", error)
+      const response = await fetch('/api/licenses/update-status', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          licenseId,
+          status: newStatus,
+          comments
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        console.error("Error updating license status:", result.error)
         toast({
           title: "Error",
-          description: "Error al actualizar el estado de la licencia",
+          description: result.error || "Error al actualizar el estado de la licencia",
           variant: "destructive",
         })
         return
       }
 
-      const statusLabels: { [key: string]: string } = {
-        aprobada: "aprobada",
-        rechazada: "rechazada",
-        en_revision: "puesta en revisión",
-        pendiente: "marcada como pendiente",
-      }
+      console.log("✅ Estado actualizado exitosamente")
 
       toast({
         title: "Estado actualizado",
-        description: `La licencia ha sido ${statusLabels[newStatus] || "actualizada"} exitosamente`,
+        description: result.message || "El estado de la licencia ha sido actualizado exitosamente",
       })
 
+      // Recargar la lista de licencias
       fetchLicenses()
     } catch (error) {
       console.error("Unexpected error:", error)
@@ -207,6 +225,44 @@ export default function LicensesPage() {
       title: "Documento abierto",
       description: `Abriendo ${fileName} en nueva pestaña`,
     })
+  }
+
+  // Función para descargar el formato Excel con los datos de la licencia
+  async function downloadExcel(licenseId: string) {
+    try {
+      const response = await fetch(`/api/licenses/excel?id=${licenseId}`)
+      
+      if (!response.ok) {
+        throw new Error('Error al generar el archivo Excel')
+      }
+
+      // Crear blob del archivo
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      
+      // Crear elemento para descarga
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `licencia_${licenseId}.xlsx` // El nombre real se define en el servidor
+      document.body.appendChild(a)
+      a.click()
+      
+      // Limpiar
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast({
+        title: "Descarga iniciada",
+        description: "El formato Excel ha sido descargado exitosamente",
+      })
+    } catch (error) {
+      console.error("Error downloading Excel:", error)
+      toast({
+        title: "Error",
+        description: "Error al descargar el formato Excel",
+        variant: "destructive",
+      })
+    }
   }
 
   useEffect(() => {
@@ -437,8 +493,7 @@ export default function LicensesPage() {
               <div className="hidden lg:block overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-32">Radicado</TableHead>
+                    <TableRow>                      <TableHead className="w-32">Radicado</TableHead>
                       <TableHead>Empleado</TableHead>
                       <TableHead className="w-32">Documento</TableHead>
                       <TableHead>Cargo</TableHead>
@@ -446,6 +501,7 @@ export default function LicensesPage() {
                       <TableHead className="w-32">Estado</TableHead>
                       <TableHead className="w-24">Creado</TableHead>
                       <TableHead className="w-24">Evidencias</TableHead>
+                      <TableHead className="w-20">Excel</TableHead>
                       <TableHead className="w-48">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -483,8 +539,7 @@ export default function LicensesPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            {formatDate(new Date(license.created_at))}
-                          </TableCell>                          <TableCell>
+                            {formatDate(new Date(license.created_at))}                          </TableCell>                          <TableCell>
                             <Button
                               variant="ghost"
                               size="sm"
@@ -496,6 +551,17 @@ export default function LicensesPage() {
                                 {license.evidences?.length || 0}
                               </span>
                               <ExternalLink className="h-3 w-3" />
+                            </Button>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="flex items-center gap-1 hover:bg-green-50 text-green-700 hover:text-green-800"
+                              onClick={() => downloadExcel(license.id)}
+                              title="Descargar formato Excel"
+                            >
+                              <Download className="h-4 w-4" />
                             </Button>
                           </TableCell>                          <TableCell>
                             <div className="flex items-center gap-2">

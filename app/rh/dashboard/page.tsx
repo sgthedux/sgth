@@ -99,7 +99,29 @@ export default function RHDashboardPage() {
         description: "Por favor espera mientras se genera el archivo Excel con todos los datos de licencias.",
       })
 
-      await generateLicenseReport()
+      // Usar la nueva API para generar el reporte desde el servidor
+      const response = await fetch('/api/licenses/report', {
+        method: 'GET',
+      })
+
+      if (!response.ok) {
+        throw new Error('Error al generar el reporte desde el servidor')
+      }
+
+      // Crear blob del archivo
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      
+      // Crear elemento para descarga
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Reporte_General_Licencias_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      
+      // Limpiar
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
       
       toast({
         title: "¡Reporte generado exitosamente!",
@@ -107,11 +129,24 @@ export default function RHDashboardPage() {
       })
     } catch (error: any) {
       console.error('Error generando reporte:', error)
-      toast({
-        title: "Error al generar reporte",
-        description: error.message || "Ocurrió un error al generar el reporte Excel. Inténtalo de nuevo.",
-        variant: "destructive",
-      })
+      
+      // Fallback: intentar con el método original del cliente
+      try {
+        console.log('🔄 Intentando generar reporte desde el cliente como fallback...')
+        await generateLicenseReport()
+        
+        toast({
+          title: "¡Reporte generado exitosamente!",
+          description: "El archivo Excel se ha descargado automáticamente. Revisa tu carpeta de descargas.",
+        })
+      } catch (fallbackError: any) {
+        console.error('Error en fallback:', fallbackError)
+        toast({
+          title: "Error al generar reporte",
+          description: fallbackError.message || "Ocurrió un error al generar el reporte Excel. Inténtalo de nuevo.",
+          variant: "destructive",
+        })
+      }
     } finally {
       setIsGeneratingReport(false)
     }

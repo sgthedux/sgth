@@ -98,25 +98,64 @@ export async function POST(request: NextRequest) {
       apellidos: formData.get("apellidos")?.toString().trim() as string,
       tipo_documento: formData.get("tipo_documento") as string,
       numero_documento: formData.get("numero_documento") as string,
+      area_trabajo: formData.get("area_trabajo")?.toString().trim() || null,
       cargo: formData.get("cargo") as string,
+      codigo_tipo_permiso: formData.get("codigo_tipo_permiso") as string,
       fecha_inicio: formData.get("fecha_inicio") as string,
       fecha_finalizacion: formData.get("fecha_finalizacion") as string,
+      fecha_compensacion: formData.get("fecha_compensacion")?.toString().trim() || null,
+      hora_inicio: formData.get("hora_inicio")?.toString().trim() || null,
+      hora_fin: formData.get("hora_fin")?.toString().trim() || null,
+      reemplazo: formData.get("reemplazo") === "true",
+      reemplazante: formData.get("reemplazante")?.toString().trim() || null,
       observacion: formData.get("observacion") as string,
     }
 
-    const requiredFields = Object.keys(licenseData)
+    const requiredFields = [
+      'nombres', 'apellidos', 'tipo_documento', 'numero_documento', 
+      'cargo', 'codigo_tipo_permiso', 'fecha_inicio', 'fecha_finalizacion', 
+      'observacion'
+    ]
+    
     for (const field of requiredFields) {
       if (!licenseData[field as keyof typeof licenseData]) {
         console.error(`❌ [API /create] Campo requerido faltante: ${field}`)
         return createErrorResponse(`El campo ${field} es requerido`, { field }, 400)
       }
     }
+    
+    // Validaciones especiales
+    if (licenseData.reemplazo && !licenseData.reemplazante) {
+      return createErrorResponse("El campo reemplazante es requerido cuando se indica reemplazo", { field: 'reemplazante' }, 400)
+    }
+    
     console.log("✅ [API /create] Campos de datos de licencia validados.")
 
+    // Validación de fechas considerando permisos por horas
     const fechaInicio = new Date(licenseData.fecha_inicio)
     const fechaFin = new Date(licenseData.fecha_finalizacion)
-    if (fechaFin <= fechaInicio) {
-      return createErrorResponse("La fecha de finalización debe ser posterior a la fecha de inicio", null, 400)
+    
+    // Permitir fechas iguales si se especifican horas (permisos por horas)
+    const tieneHoras = licenseData.hora_inicio && licenseData.hora_fin
+    
+    if (tieneHoras) {
+      // Si hay horas, validar que la fecha fin sea igual o posterior
+      if (fechaFin < fechaInicio) {
+        return createErrorResponse("La fecha de finalización no puede ser anterior a la fecha de inicio", null, 400)
+      }
+      // Si es el mismo día, validar que la hora fin sea posterior a la hora inicio
+      if (fechaFin.getTime() === fechaInicio.getTime() && licenseData.hora_inicio && licenseData.hora_fin) {
+        const horaInicio = licenseData.hora_inicio
+        const horaFin = licenseData.hora_fin
+        if (horaFin <= horaInicio) {
+          return createErrorResponse("La hora de fin debe ser posterior a la hora de inicio", null, 400)
+        }
+      }
+    } else {
+      // Si no hay horas especificadas, la fecha fin debe ser posterior (no igual)
+      if (fechaFin <= fechaInicio) {
+        return createErrorResponse("La fecha de finalización debe ser posterior a la fecha de inicio", null, 400)
+      }
     }
 
     const radicado = generateRadicado()

@@ -9,10 +9,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar, CalendarDays, FileText, Copy, CheckCircle, AlertTriangle, Upload, Loader2 } from "lucide-react" // Added Loader2
+import { Calendar, CalendarDays, FileText, Copy, CheckCircle, AlertTriangle, Upload, Loader2 } from "lucide-react"
 import { FileUpload } from "./file-upload"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
+import { Checkbox } from "@/components/ui/checkbox"
 
 interface LicenseRequestFormProps {
   onSubmit?: (data: LicenseRequestData) => void
@@ -26,9 +27,16 @@ interface LicenseRequestData {
   apellidos: string
   tipo_documento: string
   numero_documento: string
+  area_trabajo?: string
   cargo: string
+  codigo_tipo_permiso: string
   fecha_inicio: string
   fecha_finalizacion: string
+  hora_inicio?: string
+  hora_fin?: string
+  fecha_compensacion?: string
+  reemplazo: boolean
+  reemplazante?: string
   observacion: string
   documentos_soporte: File[]
 }
@@ -38,6 +46,22 @@ const tiposDocumento = [
   { value: "cedula_extranjeria", label: "Cédula de Extranjería" },
   { value: "pasaporte", label: "Pasaporte" },
   { value: "tarjeta_identidad", label: "Tarjeta de Identidad" },
+]
+
+// Tipos de permiso según códigos
+const TIPOS_PERMISO = [
+  { code: "PR", name: "Permiso Remunerado" },
+  { code: "PNR", name: "Permiso No Remunerado" },
+  { code: "LM", name: "Licencia de Maternidad" },
+  { code: "LP", name: "Licencia de Paternidad" },
+  { code: "IRL", name: "Incapacidad por Riesgo Laboral" },
+  { code: "IGE", name: "Incapacidad General" },
+  { code: "COM", name: "Compensatorio" },
+  { code: "VAC", name: "Vacaciones" },
+  { code: "PER", name: "Personal" },
+  { code: "EST", name: "Estudio" },
+  { code: "LUT", name: "Luto" },
+  { code: "OTR", name: "Otro" },
 ]
 
 export function LicenseRequestForm({
@@ -51,9 +75,16 @@ export function LicenseRequestForm({
     apellidos: "",
     tipo_documento: "",
     numero_documento: "",
+    area_trabajo: "",
     cargo: "",
+    codigo_tipo_permiso: "",
     fecha_inicio: "",
     fecha_finalizacion: "",
+    hora_inicio: "",
+    hora_fin: "",
+    fecha_compensacion: "",
+    reemplazo: false,
+    reemplazante: "",
     observacion: "",
     documentos_soporte: [],
   })
@@ -75,13 +106,38 @@ export function LicenseRequestForm({
     if (!formData.tipo_documento) newErrors.tipo_documento = "Debe seleccionar un tipo de documento"
     if (!formData.numero_documento.trim()) newErrors.numero_documento = "El número de documento es requerido"
     if (!formData.cargo.trim()) newErrors.cargo = "El cargo es requerido"
+    if (!formData.codigo_tipo_permiso) newErrors.codigo_tipo_permiso = "Debe seleccionar un tipo de permiso"
     if (!formData.fecha_inicio) newErrors.fecha_inicio = "La fecha de inicio es requerida"
     if (!formData.fecha_finalizacion) newErrors.fecha_finalizacion = "La fecha de finalización es requerida"
     if (formData.fecha_inicio && formData.fecha_finalizacion) {
       const inicio = new Date(formData.fecha_inicio)
       const fin = new Date(formData.fecha_finalizacion)
-      if (fin <= inicio)
-        newErrors.fecha_finalizacion = "La fecha de finalización debe ser posterior a la fecha de inicio"
+      
+      // Permitir fechas iguales si se especifican horas (permisos por horas)
+      const tieneHoras = formData.hora_inicio && formData.hora_fin
+      
+      if (tieneHoras) {
+        // Si hay horas, validar que la fecha fin sea igual o posterior
+        if (fin < inicio) {
+          newErrors.fecha_finalizacion = "La fecha de finalización no puede ser anterior a la fecha de inicio"
+        }
+        // Si es el mismo día, validar que la hora fin sea posterior a la hora inicio
+        if (fin.getTime() === inicio.getTime() && formData.hora_inicio && formData.hora_fin) {
+          const horaInicio = formData.hora_inicio
+          const horaFin = formData.hora_fin
+          if (horaFin <= horaInicio) {
+            newErrors.hora_fin = "La hora de fin debe ser posterior a la hora de inicio"
+          }
+        }
+      } else {
+        // Si no hay horas especificadas, la fecha fin debe ser posterior (no igual)
+        if (fin <= inicio) {
+          newErrors.fecha_finalizacion = "La fecha de finalización debe ser posterior a la fecha de inicio"
+        }
+      }
+    }
+    if (formData.reemplazo && !formData.reemplazante?.trim()) {
+      newErrors.reemplazante = "Debe especificar quién será el reemplazante"
     }
     if (!formData.observacion.trim()) newErrors.observacion = "La observación es requerida"
     setErrors(newErrors)
@@ -171,7 +227,7 @@ export function LicenseRequestForm({
     }
   }
 
-  const handleInputChange = (field: keyof LicenseRequestData, value: string) => {
+  const handleInputChange = (field: keyof LicenseRequestData, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }))
   }
@@ -198,9 +254,16 @@ export function LicenseRequestForm({
       apellidos: "",
       tipo_documento: "",
       numero_documento: "",
+      area_trabajo: "",
       cargo: "",
+      codigo_tipo_permiso: "",
       fecha_inicio: "",
       fecha_finalizacion: "",
+      hora_inicio: "",
+      hora_fin: "",
+      fecha_compensacion: "",
+      reemplazo: false,
+      reemplazante: "",
       observacion: "",
       documentos_soporte: [],
     })
@@ -364,6 +427,18 @@ export function LicenseRequestForm({
           </Alert>
         )}
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* El radicado se genera automáticamente en el servidor */}
+
+          {/* Nota informativa sobre datos personales */}
+          <Alert className="bg-amber-50 border-amber-200">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-amber-800 font-semibold">Importante - Datos Personales</AlertTitle>
+            <AlertDescription className="text-amber-700 text-sm">
+              <strong>Los datos personales deben coincidir exactamente con los registrados en su documento de identificación.</strong> Verifique la ortografía de nombres y apellidos antes de enviar la solicitud.
+            </AlertDescription>
+          </Alert>
+
+          {/* Información personal */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="nombres">Nombres *</Label>
@@ -388,6 +463,7 @@ export function LicenseRequestForm({
               {errors.apellidos && <p className="text-sm text-red-500">{errors.apellidos}</p>}
             </div>
           </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="tipo_documento">Tipo de Documento *</Label>
@@ -420,17 +496,52 @@ export function LicenseRequestForm({
               {errors.numero_documento && <p className="text-sm text-red-500">{errors.numero_documento}</p>}
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="cargo">Cargo *</Label>
-            <Input
-              id="cargo"
-              placeholder="Ingrese su cargo actual"
-              value={formData.cargo}
-              onChange={(e) => handleInputChange("cargo", e.target.value)}
-              className={errors.cargo ? "border-red-500" : ""}
-            />
-            {errors.cargo && <p className="text-sm text-red-500">{errors.cargo}</p>}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="area_trabajo">Área de Trabajo</Label>
+              <Input
+                id="area_trabajo"
+                placeholder="Ingrese su área de trabajo"
+                value={formData.area_trabajo}
+                onChange={(e) => handleInputChange("area_trabajo", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cargo">Cargo *</Label>
+              <Input
+                id="cargo"
+                placeholder="Ingrese su cargo actual"
+                value={formData.cargo}
+                onChange={(e) => handleInputChange("cargo", e.target.value)}
+                className={errors.cargo ? "border-red-500" : ""}
+              />
+              {errors.cargo && <p className="text-sm text-red-500">{errors.cargo}</p>}
+            </div>
           </div>
+
+          {/* Tipo de permiso */}
+          <div className="space-y-2">
+            <Label htmlFor="codigo_tipo_permiso">Tipo de Permiso *</Label>
+            <Select
+              value={formData.codigo_tipo_permiso}
+              onValueChange={(value) => handleInputChange("codigo_tipo_permiso", value)}
+            >
+              <SelectTrigger className={errors.codigo_tipo_permiso ? "border-red-500" : ""}>
+                <SelectValue placeholder="Seleccione el tipo de permiso" />
+              </SelectTrigger>
+              <SelectContent>
+                {TIPOS_PERMISO.map((tipo) => (
+                  <SelectItem key={tipo.code} value={tipo.code}>
+                    {tipo.code} - {tipo.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.codigo_tipo_permiso && <p className="text-sm text-red-500">{errors.codigo_tipo_permiso}</p>}
+          </div>
+
+          {/* Fechas */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="fecha_inicio" className="flex items-center gap-2">
@@ -461,11 +572,82 @@ export function LicenseRequestForm({
               {errors.fecha_finalizacion && <p className="text-sm text-red-500">{errors.fecha_finalizacion}</p>}
             </div>
           </div>
+
+          {/* Nota informativa sobre fechas */}
+          <Alert className="bg-blue-50 border-blue-200">
+            <AlertTriangle className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-700 text-sm">
+              <strong>Nota:</strong> Para permisos por horas (mismo día), puede usar la misma fecha de inicio y fin, pero debe especificar las horas correspondientes.
+            </AlertDescription>
+          </Alert>
+
+          {/* Horas */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="hora_inicio">Hora de Inicio</Label>
+              <Input
+                id="hora_inicio"
+                type="time"
+                value={formData.hora_inicio}
+                onChange={(e) => handleInputChange("hora_inicio", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hora_fin">Hora de Fin</Label>
+              <Input
+                id="hora_fin"
+                type="time"
+                value={formData.hora_fin}
+                onChange={(e) => handleInputChange("hora_fin", e.target.value)}
+                className={errors.hora_fin ? "border-red-500" : ""}
+              />
+              {errors.hora_fin && <p className="text-sm text-red-500">{errors.hora_fin}</p>}
+            </div>
+          </div>
+
+          {/* Fecha de compensación */}
           <div className="space-y-2">
-            <Label htmlFor="observacion">Observación *</Label>
+            <Label htmlFor="fecha_compensacion">Fecha de Compensación</Label>
+            <Input
+              id="fecha_compensacion"
+              type="date"
+              value={formData.fecha_compensacion}
+              onChange={(e) => handleInputChange("fecha_compensacion", e.target.value)}
+            />
+          </div>
+
+          {/* Reemplazo */}
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="reemplazo"
+                checked={formData.reemplazo}
+                onCheckedChange={(checked) => handleInputChange("reemplazo", checked === true)}
+              />
+              <Label htmlFor="reemplazo">¿Requiere reemplazo?</Label>
+            </div>
+            
+            {formData.reemplazo && (
+              <div className="space-y-2">
+                <Label htmlFor="reemplazante">Nombre del Reemplazante *</Label>
+                <Input
+                  id="reemplazante"
+                  placeholder="Ingrese el nombre completo del reemplazante"
+                  value={formData.reemplazante}
+                  onChange={(e) => handleInputChange("reemplazante", e.target.value)}
+                  className={errors.reemplazante ? "border-red-500" : ""}
+                />
+                {errors.reemplazante && <p className="text-sm text-red-500">{errors.reemplazante}</p>}
+              </div>
+            )}
+          </div>
+
+          {/* Observaciones */}
+          <div className="space-y-2">
+            <Label htmlFor="observacion">Motivo/Observación *</Label>
             <Textarea
               id="observacion"
-              placeholder="Describa el motivo y detalles de su solicitud..."
+              placeholder="Describa detalladamente el motivo de su solicitud"
               value={formData.observacion}
               onChange={(e) => handleInputChange("observacion", e.target.value)}
               className={errors.observacion ? "border-red-500" : ""}
@@ -473,6 +655,8 @@ export function LicenseRequestForm({
             />
             {errors.observacion && <p className="text-sm text-red-500">{errors.observacion}</p>}
           </div>
+
+          {/* Evidencias */}
           <div className="space-y-2">
             <Label>Cargar Evidencias</Label>
             <FileUpload
@@ -482,6 +666,7 @@ export function LicenseRequestForm({
             />
             <p className="text-sm text-gray-500">Adjunte los documentos de soporte (máx. 5 archivos, 5MB c/u)</p>
           </div>
+
           <div className="flex justify-end pt-4">
             <Button type="submit" disabled={isLoading} className="min-w-[120px]">
               {isLoading ? (

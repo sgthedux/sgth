@@ -47,7 +47,7 @@ export async function generateLicenseReport() {
       throw new Error('No hay datos de licencias para generar el reporte')
     }
 
-    console.log(`📊 Procesando ${data.length} registros de licencias`)    // Formatear datos para el Excel
+    console.log(`📊 Procesando ${data.length} registros de licencias`)    // Formatear datos para el Excel con todos los campos del formulario actualizado
     const formattedData = data.map((item: any) => ({
       'Radicado': item.radicado || 'N/A',
       'Nombres': item.nombres || 'N/A',
@@ -55,16 +55,25 @@ export async function generateLicenseReport() {
       'Tipo Documento': formatDocumentType(item.tipo_documento),
       'Número Documento': item.numero_documento || 'N/A',
       'Cargo': item.cargo || 'N/A',
-      'Fecha Inicio Licencia': formatDate(item.fecha_inicio),
-      'Fecha Fin Licencia': formatDate(item.fecha_finalizacion),
-      'Días de Licencia': calculateDaysDifference(item.fecha_inicio, item.fecha_finalizacion),
-      'Estado Licencia': formatStatus(item.estado),
-      'Observaciones/Motivo': item.observacion || 'N/A',
+      'Área de Trabajo': item.area_trabajo || 'N/A',
+      'Código Tipo Permiso': item.codigo_tipo_permiso || 'N/A',
+      'Tipo de Permiso': formatPermisoType(item.codigo_tipo_permiso),
+      'Fecha Inicio': formatDate(item.fecha_inicio),
+      'Fecha Finalización': formatDate(item.fecha_finalizacion),
+      'Hora Inicio': item.hora_inicio || 'N/A',
+      'Hora Fin': item.hora_fin || 'N/A',
+      'Fecha Compensación': item.fecha_compensacion ? formatDate(item.fecha_compensacion) : 'N/A',
+      'Requiere Reemplazo': item.reemplazo ? 'SÍ' : 'NO',
+      'Nombre Reemplazante': item.reemplazante || 'N/A',
+      'Días/Horas de Permiso': calculatePermisoDuration(item.fecha_inicio, item.fecha_finalizacion, item.hora_inicio, item.hora_fin),
+      'Estado': formatStatus(item.estado),
+      'Motivo/Observación': item.observacion || 'N/A',
+      'Comentarios RH': item.comentarios_rh || 'N/A',
       'Cantidad Evidencias': item.evidences?.length || 0,
       'Archivos Adjuntos': item.evidences?.map((e: any) => e.file_name).join(', ') || 'Sin archivos',
       'Fecha Solicitud': formatDateTime(item.created_at),
-      'Última Actualización': formatDateTime(item.updated_at),
-      'Fecha Revisión RH': item.reviewed_at ? formatDateTime(item.reviewed_at) : 'Pendiente de revisión'
+      'Fecha Actualización': formatDateTime(item.updated_at),
+      'Fecha Actualización RH': item.fecha_actualizacion ? formatDateTime(item.fecha_actualizacion) : 'N/A'
     }))
 
     // Estadísticas adicionales
@@ -101,28 +110,37 @@ export async function generateLicenseReport() {
     XLSX.utils.book_append_sheet(workbook, statsSheet, 'Resumen')
 
     // Hoja 2: Datos completos
-    const dataSheet = XLSX.utils.json_to_sheet(formattedData)    // Configurar ancho de columnas
+    const dataSheet = XLSX.utils.json_to_sheet(formattedData)    // Configurar ancho de columnas actualizado para todos los campos
     const colWidths = [
       { wch: 18 }, // Radicado
       { wch: 15 }, // Nombres
       { wch: 15 }, // Apellidos
       { wch: 18 }, // Tipo Documento
       { wch: 15 }, // Número Documento
-      { wch: 20 }, // Cargo
-      { wch: 16 }, // Fecha Inicio Licencia
-      { wch: 16 }, // Fecha Fin Licencia
-      { wch: 12 }, // Días de Licencia
-      { wch: 15 }, // Estado Licencia
-      { wch: 35 }, // Observaciones/Motivo
+      { wch: 25 }, // Cargo
+      { wch: 20 }, // Área de Trabajo
+      { wch: 15 }, // Código Tipo Permiso
+      { wch: 25 }, // Tipo de Permiso
+      { wch: 16 }, // Fecha Inicio
+      { wch: 16 }, // Fecha Finalización
+      { wch: 12 }, // Hora Inicio
+      { wch: 12 }, // Hora Fin
+      { wch: 16 }, // Fecha Compensación
+      { wch: 18 }, // Requiere Reemplazo
+      { wch: 20 }, // Nombre Reemplazante
+      { wch: 18 }, // Días/Horas de Permiso
+      { wch: 15 }, // Estado
+      { wch: 40 }, // Motivo/Observación
+      { wch: 30 }, // Comentarios RH
       { wch: 12 }, // Cantidad Evidencias
       { wch: 40 }, // Archivos Adjuntos
       { wch: 18 }, // Fecha Solicitud
-      { wch: 18 }, // Última Actualización
-      { wch: 20 }  // Fecha Revisión RH
+      { wch: 18 }, // Fecha Actualización
+      { wch: 20 }  // Fecha Actualización RH
     ]
     dataSheet['!cols'] = colWidths
 
-    XLSX.utils.book_append_sheet(workbook, dataSheet, 'Datos Licencias')
+    XLSX.utils.book_append_sheet(workbook, dataSheet, 'datos licencias')
 
     // Generar nombre de archivo con fecha
     const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -195,5 +213,57 @@ function calculateDaysDifference(startDate: string, endDate: string): number {
     return diffDays
   } catch {
     return 0
+  }
+}
+
+function formatPermisoType(codigo: string): string {
+  const tipos: { [key: string]: string } = {
+    'PR': 'Permiso Remunerado',
+    'PNR': 'Permiso No Remunerado',
+    'PEPS': 'Permiso de Salud',
+    'PCAP': 'Permiso para Capacitación',
+    'PM': 'Permiso por Maternidad',
+    'PC': 'Permiso por Calamidad',
+    'PD': 'Permiso por Duelo/Luto',
+    'PMT': 'Permiso por Matrimonio',
+    'PLR': 'Permiso Lactancia Remunerado',
+    'PLNR': 'Permiso Lactancia No Remunerado',
+    'CMS': 'Comisión',
+    'OTRO': 'Otro'
+  }
+  return tipos[codigo] || codigo || 'N/A'
+}
+
+function calculatePermisoDuration(fechaInicio: string, fechaFin: string, horaInicio?: string, horaFin?: string): string {
+  if (!fechaInicio || !fechaFin) return 'N/A'
+  
+  try {
+    const inicio = new Date(fechaInicio)
+    const fin = new Date(fechaFin)
+    
+    // Si las fechas son iguales y hay horas, es un permiso por horas
+    if (inicio.toDateString() === fin.toDateString() && horaInicio && horaFin) {
+      const [inicioHoras, inicioMinutos] = horaInicio.split(':').map(Number)
+      const [finHoras, finMinutos] = horaFin.split(':').map(Number)
+      
+      const inicioTotalMinutos = inicioHoras * 60 + inicioMinutos
+      const finTotalMinutos = finHoras * 60 + finMinutos
+      const diferenciaMinutos = finTotalMinutos - inicioTotalMinutos
+      
+      if (diferenciaMinutos >= 60) {
+        const horas = Math.floor(diferenciaMinutos / 60)
+        const minutos = diferenciaMinutos % 60
+        return minutos > 0 ? `${horas}h ${minutos}m` : `${horas}h`
+      } else {
+        return `${diferenciaMinutos}m`
+      }
+    }
+    
+    // Si no, calculamos días
+    const diffTime = Math.abs(fin.getTime() - inicio.getTime())
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    return diffDays === 1 ? '1 día' : `${diffDays} días`
+  } catch {
+    return 'N/A'
   }
 }
