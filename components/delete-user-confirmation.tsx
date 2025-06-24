@@ -177,7 +177,7 @@ export function DeleteUserConfirmation({ userId, userName, onSuccess, onError }:
           
           <div className="pt-2">
             <label htmlFor="confirm" className="block text-sm font-medium mb-1 text-muted-foreground">
-              Escriba "eliminar" para confirmar:
+              Escriba &quot;eliminar&quot; para confirmar:
             </label>
             <Input
               id="confirm"

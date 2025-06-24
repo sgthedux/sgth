@@ -148,8 +148,9 @@ function DashboardContent({
                 isLoading={profileDataLoading}
                 activeSection={activeSection}
                 activeTab={activeTab}
-                children={children}
-              />
+              >
+                {children}
+              </ProfileContent>
             )}
           </Suspense>
         </main>
