@@ -1,6 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
+// Configuración para runtime dinámico
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     console.log("🔍 [LICENSE STATUS] Iniciando consulta de estado")
@@ -69,7 +73,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Crear cliente de Supabase
-    const supabase = createClient()
+    const supabase = await createClient()
     console.log("✅ [LICENSE STATUS] Cliente Supabase creado")
 
     // Buscar la solicitud por radicado

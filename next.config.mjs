@@ -21,20 +21,8 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['exceljs'],
   },
-  // Evitar prerenderizado de rutas API
-  async headers() {
-    return [
-      {
-        source: '/api/:path*',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'no-cache, no-store, must-revalidate',
-          },
-        ],
-      },
-    ]
-  },
+  // Configuración para el output
+  output: 'standalone',
 }
 
 export default nextConfig
