@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     // Debug: Mostrar todas las claves del FormData
     console.log("🔍 [API /create] Claves en FormData:", Array.from(formData.keys()))
     formData.forEach((value, key) => {
-      if (value instanceof File) {
+      if (value && typeof value === 'object' && 'name' in value && 'size' in value) {
         console.log(`📎 [API /create] Archivo encontrado - Key: ${key}, Name: ${value.name}, Size: ${value.size}, Type: ${value.type}`)
       } else {
         console.log(`📝 [API /create] Campo encontrado - Key: ${key}, Value: ${value}`)
@@ -197,7 +197,11 @@ export async function POST(request: NextRequest) {
 
     const uploadedEvidences: any[] = []
     const uploadErrors: any[] = []
-    const evidenceFiles = formData.getAll("evidences") as File[]
+    // Obtener archivos de evidencia del FormData
+    const evidenceEntries = formData.getAll("evidences")
+    const evidenceFiles = evidenceEntries.filter(file => 
+      file && typeof file === 'object' && 'name' in file && 'size' in file
+    ) as File[]
 
     console.log(`📎 [API /create] Archivos detectados en FormData: ${evidenceFiles.length}`)
     evidenceFiles.forEach((file, index) => {
