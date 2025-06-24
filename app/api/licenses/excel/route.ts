@@ -4,6 +4,10 @@ import * as ExcelJS from 'exceljs'
 import * as fs from 'fs'
 import * as path from 'path'
 
+// Configuración para runtime dinámico
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 // Mapeo de códigos de permisos a coordenadas de Excel (según la plantilla real)
 const PERMISO_COORDS: Record<string, string> = {
   "PR": "B13",   // Permiso Remunerado

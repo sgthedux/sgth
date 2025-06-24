@@ -17,6 +17,24 @@ const nextConfig = {
     ],
     unoptimized: true,
   },
+  // Configuración para asegurar que las rutas API se manejen correctamente
+  experimental: {
+    serverComponentsExternalPackages: ['exceljs'],
+  },
+  // Evitar prerenderizado de rutas API
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate',
+          },
+        ],
+      },
+    ]
+  },
 }
 
 export default nextConfig
