@@ -2,6 +2,10 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { uploadToR2 } from "@/lib/r2-direct"
 
+// Configuración para runtime dinámico
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 // Función para generar un radicado único
 function generateRadicado() {
   const year = new Date().getFullYear()

@@ -12,20 +12,9 @@
 [functions]
   node_bundler = "esbuild"
 
+# Solo mantener el redirect principal para SPA
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-  conditions = {Role = ["admin"]}
-
-# Handle API routes
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
-
-# Handle all other routes through Next.js
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+  force = false
