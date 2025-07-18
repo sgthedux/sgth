@@ -28,6 +28,13 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 
+interface RouteItem {
+  title: string
+  href: string
+  icon: React.ReactElement
+  children?: RouteItem[]
+}
+
 interface SidebarProps {
   isAdmin?: boolean
   isRH?: boolean
@@ -42,10 +49,18 @@ export function Sidebar({ isAdmin = false, isRH = false }: SidebarProps) {
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
+
+  // Efecto para manejar la hidratación
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   // Verificar el rol del usuario al cargar el componente
   useEffect(() => {
-    let isMounted = true
+    if (!isMounted) return
+    
+    let isComponentMounted = true
 
     async function checkUserRole() {
       if (loading) return
@@ -56,13 +71,13 @@ export function Sidebar({ isAdmin = false, isRH = false }: SidebarProps) {
           data: { session },
         } = await supabase.auth.getSession()
 
-        if (!session || !isMounted) return
+        if (!session || !isComponentMounted) return
 
         // Usar el cliente seguro para obtener el rol
         const { secureDB } = await import("@/lib/supabase/secure-client")
         const profileData = await secureDB.getProfile(session.user.id)
 
-        if (!isMounted) return
+        if (!isComponentMounted) return
 
         setUserRole(profileData?.role || "user")
 
@@ -79,7 +94,7 @@ export function Sidebar({ isAdmin = false, isRH = false }: SidebarProps) {
         // En caso de error, asumir usuario regular
         setUserRole("user")
       } finally {
-        if (isMounted) {
+        if (isComponentMounted) {
           setLoading(false)
         }
       }
@@ -88,9 +103,9 @@ export function Sidebar({ isAdmin = false, isRH = false }: SidebarProps) {
     checkUserRole()
 
     return () => {
-      isMounted = false
+      isComponentMounted = false
     }
-  }, [isAdmin, isRH, router, supabase, loading])
+  }, [isAdmin, isRH, router, supabase, loading, isMounted])
 
   // Cerrar el sidebar en pantallas pequeñas cuando cambia la ruta
   useEffect(() => {
@@ -156,7 +171,7 @@ export function Sidebar({ isAdmin = false, isRH = false }: SidebarProps) {
     setActiveGroup((prevActiveGroup) => (prevActiveGroup === title ? null : title))
   }, [])
 
-  const userRoutes = [
+  const userRoutes: RouteItem[] = [
     {
       title: "Dashboard",
       href: "/dashboard",
@@ -201,7 +216,7 @@ export function Sidebar({ isAdmin = false, isRH = false }: SidebarProps) {
     },
   ]
 
-  const adminRoutes = [
+  const adminRoutes: RouteItem[] = [
     {
       title: "Dashboard",
       href: "/admin/dashboard",
@@ -224,7 +239,7 @@ export function Sidebar({ isAdmin = false, isRH = false }: SidebarProps) {
     },
   ]
 
-  const rhRoutes = [
+  const rhRoutes: RouteItem[] = [
     {
       title: "Dashboard",
       href: "/rh/dashboard",
@@ -249,6 +264,11 @@ export function Sidebar({ isAdmin = false, isRH = false }: SidebarProps) {
 
   const routes = isRH ? rhRoutes : isAdmin ? adminRoutes : userRoutes
   const basePath = isRH ? "/rh/dashboard" : isAdmin ? "/admin/dashboard" : "/dashboard"
+
+  // Prevenir hidratación incorrecta
+  if (!isMounted) {
+    return null
+  }
 
   return (
     <>
@@ -314,7 +334,7 @@ export function Sidebar({ isAdmin = false, isRH = false }: SidebarProps) {
                       </button>
                       {activeGroup === route.title && (
                         <div className="ml-4 pl-2 border-l border-border">
-                          {route.children.map((child, j) => (
+                          {route.children.map((child: RouteItem, j: number) => (
                             <Link
                               key={j}
                               href={child.href}
@@ -391,7 +411,7 @@ const MobileSidebar = memo(function MobileSidebar({
   isAdmin?: boolean
   isRH?: boolean
   onSignOut: () => void
-  routes: any[]
+  routes: RouteItem[]
   activeGroup: string | null
   toggleGroup: (title: string) => void
   isSigningOut?: boolean
@@ -435,7 +455,7 @@ const MobileSidebar = memo(function MobileSidebar({
                   </button>
                   {activeGroup === route.title && (
                     <div className="ml-4 pl-2 border-l border-border">
-                      {route.children.map((child, j) => (
+                      {route.children.map((child: RouteItem, j: number) => (
                         <Link
                           key={j}
                           href={child.href}

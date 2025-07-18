@@ -46,11 +46,19 @@ function DashboardContent({
 }) {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [isMounted, setIsMounted] = useState(false)
   const supabase = createClient()
+
+  // Efecto para manejar la hidratación
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   // Cargar usuario de forma optimizada
   useEffect(() => {
-    let isMounted = true
+    if (!isMounted) return
+    
+    let isComponentMounted = true
 
     const loadUser = async () => {
       try {
@@ -59,7 +67,7 @@ function DashboardContent({
           const cachedUser = localStorage.getItem("currentUser")
           if (cachedUser) {
             const parsedUser = JSON.parse(cachedUser)
-            if (isMounted) {
+            if (isComponentMounted) {
               setUser(parsedUser)
               setLoading(false)
             }
@@ -74,14 +82,14 @@ function DashboardContent({
 
         if (error || !session) {
           console.error("Error loading user session:", error)
-          if (isMounted) {
+          if (isComponentMounted) {
             setLoading(false)
             router.push("/auth/login")
           }
           return
         }
 
-        if (isMounted) {
+        if (isComponentMounted) {
           setUser(session.user)
           setLoading(false)
           // Guardar en localStorage (solo en el cliente)
@@ -91,7 +99,7 @@ function DashboardContent({
         }
       } catch (error) {
         console.error("Error in loadUser:", error)
-        if (isMounted) {
+        if (isComponentMounted) {
           setLoading(false)
         }
       }
@@ -100,9 +108,9 @@ function DashboardContent({
     loadUser()
 
     return () => {
-      isMounted = false
+      isComponentMounted = false
     }
-  }, [router, supabase])
+  }, [router, supabase, isMounted])
 
   // Cargar todos los datos del perfil de una vez
   const { data: allProfileData, isLoading: profileDataLoading } = useAllProfileData(user?.id)
@@ -123,6 +131,11 @@ function DashboardContent({
   // Mostrar estado de carga solo si no hay datos en caché
   if (loading && (typeof window === 'undefined' || !localStorage.getItem("currentUser"))) {
     return <LoadingState message="Cargando usuario..." />
+  }
+
+  // Prevenir hidratación incorrecta
+  if (!isMounted) {
+    return <LoadingState message="Inicializando..." />
   }
 
   // Usar datos en caché mientras se cargan los datos frescos
