@@ -2,7 +2,7 @@
 
 import { Label } from "@/components/ui/label"
 import type React from "react"
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -74,30 +74,35 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
 
   // Cargar datos existentes cuando estén disponibles
   useEffect(() => {
-    if (dbLanguages && dbLanguages.length > 0 && items.length === 1 && !items[0].language) {
-      console.log("🔄 Cargando datos de idiomas desde BD:", dbLanguages)
-      console.log("🔄 Datos incluyen document_url:", dbLanguages.map(lang => ({
-        language: lang.language,
-        document_url: lang.document_url
-      })))
-      
-      // Agregar tempId y document_url a datos existentes si no los tienen
-      const itemsWithTempId = dbLanguages.map((item: any) => ({
-        ...item,
-        document_url: item.document_url || "",
-        tempId: item.tempId || `language_${item.id || Date.now()}`
-      }))
-      setItems(itemsWithTempId)
+    if (dbLanguages && !dataInitialized.current) {
+      if (dbLanguages.length > 0) {
+        // Cargar todos los datos de la BD para mantener consistencia
+        const itemsWithTempId = dbLanguages.map((item: any) => ({
+          ...item,
+          document_url: item.document_url || "",
+          tempId: item.tempId || `language_${item.id || Date.now()}`
+        }))
+        setItems(itemsWithTempId)
+      } else {
+        // Si no hay datos en BD, mantener un item inicial vacío
+        setItems(initialData)
+      }
+      dataInitialized.current = true
     }
-  }, [dbLanguages, items, setItems])
+  }, [dbLanguages, setItems, initialData])
 
   const [loading, setLoading] = useState(false)
+  const dataInitialized = useRef(false)
+
+  // Resetear el flag cuando cambie el usuario
+  useEffect(() => {
+    dataInitialized.current = false
+  }, [userId])
 
   const handleAddItem = () => {
     const timestamp = Date.now()
     const random = Math.random().toString(36).substr(2, 9)
     const tempId = `language_${timestamp}_${random}`
-    console.log("🆕 Creando nuevo idioma con tempId:", tempId)
     
     const newItems = [
       ...items,
@@ -141,15 +146,9 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
 
   // Callback para cuando se sube un documento
   const handleDocumentUpload = (index: number, documentUrl: string) => {
-    console.log("🔥 DOCUMENTO IDIOMA SUBIDO - URL recibida:", documentUrl)
-    console.log("🔥 DOCUMENTO IDIOMA SUBIDO - Guardando en índice:", index)
-    console.log("🔥 DOCUMENTO IDIOMA SUBIDO - Item actual antes:", items[index])
-    
     const newItems = [...items]
     newItems[index] = { ...newItems[index], document_url: documentUrl }
     setItems(newItems)
-    
-    console.log("🔥 DOCUMENTO IDIOMA SUBIDO - Item actual después:", newItems[index])
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -157,11 +156,9 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
     
     if (loading) return
     
-    console.log("🔄 INICIANDO GUARDADO DE IDIOMAS")
     setLoading(true)
 
     try {
-      console.log("🔄 Validando campos obligatorios...")
       // Validar que no haya campos obligatorios vacíos
       const invalidItems = items.filter(item => 
         !item.language.trim() || 
@@ -171,129 +168,123 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
       )
       
       if (invalidItems.length > 0) {
-        console.log("❌ Validación fallida")
         notifications.error.validation("Por favor complete todos los campos: idioma y niveles de habla, lectura y escritura")
         setLoading(false)
         return
       }
 
-      console.log("🔄 Obteniendo idiomas existentes...")
-      // Obtener idiomas existentes para comparar
-      const { data: existingLanguages, error: fetchError } = await supabase
-        .from("languages")
-        .select("*")
-        .eq("user_id", userId)
-
-      if (fetchError) throw fetchError
-
-      console.log("🔄 Preparando datos para guardado...")
-      // Preparar datos para upsert
-      const languageData = items.map((item) => {
-        // Buscar si ya existe un idioma similar
-        const existingItem = existingLanguages?.find(existing => 
-          existing.language === item.language
-        )
-
-        return {
-          id: existingItem?.id || item.id || undefined,
+      // Preparar datos limpios sin elementos vacíos
+      const languageData = items
+        .filter(item => item.language.trim()) // Solo idiomas con nombre
+        .map((item) => ({
+          id: item.id || undefined,
           user_id: userId,
-          language: item.language,
+          language: item.language.trim(),
           speaking_level: item.speaking_level,
           reading_level: item.reading_level,
           writing_level: item.writing_level,
           document_url: item.document_url || null
+        }))
+
+      // Filtrar duplicados por idioma (mantener el último)
+      const uniqueLanguageData = languageData.reduce((acc, current) => {
+        const existing = acc.find(item => item.language.toLowerCase() === current.language.toLowerCase())
+        if (existing) {
+          // Reemplazar el existente con el actual (más reciente)
+          const index = acc.indexOf(existing)
+          acc[index] = current
+        } else {
+          acc.push(current)
         }
-      })
+        return acc
+      }, [] as typeof languageData)
 
-      console.log("🔥 GUARDANDO IDIOMAS:")
-      console.log("🔥 - items originales:", items)
-      console.log("🔥 - languageData con document_url:", languageData)
-      console.log("🔥 - document_url en cada item:", languageData.map(item => ({ language: item.language, document_url: item.document_url })))
-
-      // Filtrar duplicados
-      const uniqueLanguageData = languageData.filter((item, index, self) =>
-        index === self.findIndex((l) => l.language === item.language)
-      )
-
-      console.log("🔄 Eliminando idiomas que ya no están en la lista...")
-      // Primero, eliminar idiomas que ya no están en la lista
-      const currentIds = uniqueLanguageData.map(item => item.id).filter(Boolean)
-      const existingIds = existingLanguages?.map(item => item.id) || []
-      const idsToDelete = existingIds.filter(id => !currentIds.includes(id))
-
-      if (idsToDelete.length > 0) {
-        const { error: deleteError } = await supabase
-          .from("languages")
-          .delete()
-          .in("id", idsToDelete)
-        if (deleteError) throw deleteError
-      }
-
-      console.log("=== DEBUG LANGUAGE SAVE ===")
-      console.log("userId:", userId)
-      console.log("items:", items)
-      console.log("items type:", typeof items)
-      console.log("items isArray:", Array.isArray(items))
-      console.log("languageData:", languageData)
-      console.log("uniqueLanguageData:", uniqueLanguageData)
-      console.log("=== END DEBUG ===")
-
-      // Manejar el upsert de forma más robusta
+      // Guardar idiomas individualmente para mejor control de errores
       const savedLanguages: any[] = []
       for (const langData of uniqueLanguageData) {
         try {
-          console.log(`🔥 Guardando idioma: ${langData.language}`)
           if (langData.id) {
             // Actualizar idioma existente
             const { data, error } = await supabase
               .from("languages")
-              .update(langData)
+              .update({
+                language: langData.language,
+                speaking_level: langData.speaking_level,
+                reading_level: langData.reading_level,
+                writing_level: langData.writing_level,
+                document_url: langData.document_url
+              })
               .eq("id", langData.id)
+              .eq("user_id", userId) // Seguridad adicional
               .select()
               .single()
             
-            if (error) {
-              console.error("Error updating language:", error)
-              throw error
-            }
+            if (error) throw error
             savedLanguages.push(data)
-            console.log(`✅ Idioma actualizado: ${langData.language}`)
           } else {
-            // Insertar nuevo idioma
-            const { id, ...insertData } = langData
-            const { data, error } = await supabase
+            // Verificar si ya existe un idioma similar antes de insertar
+            const { data: existing } = await supabase
               .from("languages")
-              .insert(insertData)
-              .select()
+              .select("id")
+              .eq("user_id", userId)
+              .eq("language", langData.language)
               .single()
-            
-            if (error) {
-              console.error("Error inserting language:", error)
-              throw error
+
+            if (existing) {
+              // Actualizar el existente en lugar de duplicar
+              const { data, error } = await supabase
+                .from("languages")
+                .update({
+                  speaking_level: langData.speaking_level,
+                  reading_level: langData.reading_level,
+                  writing_level: langData.writing_level,
+                  document_url: langData.document_url
+                })
+                .eq("id", existing.id)
+                .select()
+                .single()
+              
+              if (error) throw error
+              savedLanguages.push(data)
+            } else {
+              // Insertar nuevo idioma
+              const { data, error } = await supabase
+                .from("languages")
+                .insert({
+                  user_id: langData.user_id,
+                  language: langData.language,
+                  speaking_level: langData.speaking_level,
+                  reading_level: langData.reading_level,
+                  writing_level: langData.writing_level,
+                  document_url: langData.document_url
+                })
+                .select()
+                .single()
+              
+              if (error) throw error
+              savedLanguages.push(data)
             }
-            savedLanguages.push(data)
-            console.log(`✅ Idioma insertado: ${langData.language}`)
           }
         } catch (error) {
-          console.error(`❌ Error saving language ${langData.language}:`, error)
+          console.error(`Error saving language ${langData.language}:`, error)
           // Continuar con los siguientes idiomas
           continue
         }
       }
 
-      console.log("🔥 TOTAL IDIOMAS GUARDADOS:", savedLanguages.length)
-
-      console.log("🔄 Actualizando items con IDs reales...")
-      // Actualizar los items con los IDs reales si es necesario
-      const updatedItems = items.map(item => {
-        const savedLang = savedLanguages.find(lang => lang.language === item.language)
-        return savedLang?.id ? { ...item, id: savedLang.id } : item
+      // Actualizar los items con los datos guardados
+      const updatedItems = savedLanguages.map(savedLang => {
+        const originalItem = items.find(item => 
+          item.language.toLowerCase() === savedLang.language.toLowerCase()
+        )
+        return {
+          ...savedLang,
+          tempId: originalItem?.tempId || `language_${savedLang.id}`
+        }
       })
       
       setItems(updatedItems)
-      console.log("✅ Items actualizados con IDs")
 
-      console.log("🔄 Actualizando perfil...")
       // Update profile status
       try {
         const { error: profileError } = await supabase
@@ -303,21 +294,15 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
 
         if (profileError) {
           console.error("Error al actualizar el perfil:", profileError)
-        } else {
-          console.log("✅ Perfil actualizado")
         }
       } catch (profileErr) {
         console.error("Error en actualización de perfil:", profileErr)
       }
 
-      console.log("🔄 Limpiando cache...")
       // Limpiar cache después de guardar exitosamente
       clearCache()
       
-      console.log("🔄 Mostrando notificación de éxito...")
-      notifications.success.save("Información de idiomas")
-      
-      console.log("✅ GUARDADO COMPLETADO - Quitando loading")
+      notifications.success.save("Información de idiomas guardada exitosamente")
       
     } catch (error: any) {
       console.error("❌ Error al guardar idiomas:", error)
@@ -338,9 +323,7 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
       notifications.error.save(errorMessage)
     } finally {
       // SIEMPRE quitar loading, sin importar qué pase
-      console.log("🔄 FINALLY: Quitando loading...")
       setLoading(false)
-      console.log("✅ FINALLY: Loading quitado")
     }
   }
 

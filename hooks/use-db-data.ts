@@ -36,16 +36,16 @@ export function useDBData<T>(options: UseDBDataOptions) {
 
         if (dbError) {
           throw new Error(dbError.message)
-        }        setData(result || [])
-        
-        // Solo mostrar notificación si hay datos y es la primera carga explícita
-        // Removemos las notificaciones automáticas para evitar spam      } catch (error) {
+        }
+
+        setData(result || [])
+      } catch (error) {
         console.error(`Error loading ${table}:`, error)
         const errorMessage = typeof error === 'object' && error !== null && 'message' in error 
           ? (error as Error).message 
           : 'Error al cargar datos'
         setError(errorMessage)
-        // Solo registrar en consola, no mostrar toast automático
+        toast.error(`Error al cargar ${table}`)
       } finally {
         setLoading(false)
       }
@@ -54,5 +54,8 @@ export function useDBData<T>(options: UseDBDataOptions) {
     loadData()
   }, [userId, table, enabled])
 
-  return { data, loading, error, refetch: () => setLoading(true) }
+  return { data, loading, error, refetch: () => {
+    setData([])
+    setLoading(true)
+  } }
 }

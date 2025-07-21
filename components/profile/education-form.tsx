@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -109,19 +109,27 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
 
   // Cargar datos existentes cuando estén disponibles
   useEffect(() => {
-    if (dbEducations && dbEducations.length > 0 && items.length === 1 && !items[0].institution) {
-      console.log("🔄 Cargando datos de educación desde BD:", dbEducations)
-      console.log("🔄 Datos incluyen document_url:", dbEducations.map(edu => ({
-        institution: edu.institution,
-        document_url: edu.document_url
-      })))
-      setItems(dbEducations)
+    if (dbEducations && !dataInitialized.current) {
+      if (dbEducations.length > 0) {
+        // Siempre cargar todos los datos de la BD para mantener consistencia
+        setItems(dbEducations)
+      } else {
+        // Si no hay datos en BD, mantener un item inicial vacío
+        setItems(initialData)
+      }
+      dataInitialized.current = true
     }
-  }, [dbEducations, items, setItems])
+  }, [dbEducations, setItems, initialData])
 
   const [basicLoading, setBasicLoading] = useState(false)
   const [higherLoading, setHigherLoading] = useState(false)
   const [academicModalities, setAcademicModalities] = useState<any[]>([])
+  const dataInitialized = useRef(false)
+
+  // Resetear el flag cuando cambie el usuario
+  useEffect(() => {
+    dataInitialized.current = false
+  }, [userId])
 
   // Hook para manejar referencias a documentos
   const { addDocumentRef, removeDocumentRef, associateAllDocumentsWithRecords } = useDocumentRefs()

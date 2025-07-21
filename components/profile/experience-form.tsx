@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label"
 
 import type React from "react"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -100,18 +100,25 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
 
   // Cargar datos existentes cuando estén disponibles
   useEffect(() => {
-    if (dbExperiences && dbExperiences.length > 0 && items.length === 1 && !items[0].company) {
-      console.log("🔄 Cargando datos de experiencia desde BD:", dbExperiences)
-      console.log("🔄 Datos incluyen document_url:", dbExperiences.map(exp => ({
-        company: exp.company,
-        position: exp.position,
-        document_url: exp.document_url
-      })))
-      setItems(dbExperiences)
+    if (dbExperiences && !dataInitialized.current) {
+      if (dbExperiences.length > 0) {
+        // Siempre cargar todos los datos de la BD para mantener consistencia
+        setItems(dbExperiences)
+      } else {
+        // Si no hay datos en BD, mantener un item inicial vacío
+        setItems(initialData)
+      }
+      dataInitialized.current = true
     }
-  }, [dbExperiences, items, setItems])
+  }, [dbExperiences, setItems, initialData])
 
   const [loading, setLoading] = useState(false)
+  const dataInitialized = useRef(false)
+
+  // Resetear el flag cuando cambie el usuario
+  useEffect(() => {
+    dataInitialized.current = false
+  }, [userId])
 
   // Hook para manejar referencias a documentos
   const { addDocumentRef, removeDocumentRef, getAllDocumentUrls } = useDocumentRefs()
