@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DocumentUpload } from "@/components/profile/document-upload"
+import { RobustDocumentUpload } from "@/components/profile/robust-document-upload"
 import { AutoDocumentUpload } from "@/components/profile/auto-document-upload"
 import { DatePicker } from "@/components/date-picker"
 import { DeleteConfirmation } from "@/components/delete-confirmation"
@@ -23,12 +24,14 @@ import { useUser } from "@/hooks/use-user"
 import { secureDB } from "@/lib/supabase/secure-client"
 import { useFormCache } from "@/hooks/use-form-cache"
 import { useDBData } from "@/hooks/use-db-data"
+import { useDocumentRefs } from "@/hooks/use-document-refs"
 import { notifications } from "@/lib/notifications"
 
 interface EducationFormProps {
   userId: string
   educations?: Array<{
     id: string
+    tempId?: string
     education_type: string
     institution: string
     degree: string
@@ -46,6 +49,7 @@ interface EducationFormProps {
     title_validated: boolean | null
     ies_code: string | null
     academic_modality: string | null
+    document_url?: string | null
   }>
 }
 
@@ -58,6 +62,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
   // Configuración inicial de datos con useMemo
   const initialData = useMemo(() => [{
     id: "",
+    tempId: undefined as string | undefined,
     education_type: "basic",
     institution: "",
     degree: "",
@@ -75,6 +80,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
     title_validated: false,
     ies_code: "",
     academic_modality: "",
+    document_url: null,
   }], [])
 
   // Cache local de datos del formulario
@@ -104,12 +110,21 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
   // Cargar datos existentes cuando estén disponibles
   useEffect(() => {
     if (dbEducations && dbEducations.length > 0 && items.length === 1 && !items[0].institution) {
+      console.log("🔄 Cargando datos de educación desde BD:", dbEducations)
+      console.log("🔄 Datos incluyen document_url:", dbEducations.map(edu => ({
+        institution: edu.institution,
+        document_url: edu.document_url
+      })))
       setItems(dbEducations)
     }
   }, [dbEducations, items, setItems])
 
-  const [loading, setLoading] = useState(false)
+  const [basicLoading, setBasicLoading] = useState(false)
+  const [higherLoading, setHigherLoading] = useState(false)
   const [academicModalities, setAcademicModalities] = useState<any[]>([])
+
+  // Hook para manejar referencias a documentos
+  const { addDocumentRef, removeDocumentRef, associateAllDocumentsWithRecords } = useDocumentRefs()
 
   // Cargar catálogos
   useEffect(() => {
@@ -133,10 +148,16 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
   }, [supabase])
 
   const handleAddItem = (type: string) => {
+    const timestamp = Date.now()
+    const random = Math.random().toString(36).substr(2, 9)
+    const tempId = `${type}_${timestamp}_${random}`
+    console.log("🆕 Creando nuevo item de educación con tempId:", tempId)
+    
     const newItems = [
       ...items,
       {
         id: "",
+        tempId: tempId,
         education_type: type,
         institution: "",
         degree: "",
@@ -154,6 +175,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
         title_validated: false,
         ies_code: "",
         academic_modality: "",
+        document_url: null,
       },
     ]
     setItems(newItems)
@@ -161,6 +183,14 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
 
   const handleRemoveItem = async (index: number) => {
     try {
+      // Obtener el item a eliminar
+      const itemToRemove = items[index]
+      
+      // Limpiar referencias de documentos si existe tempId
+      if (itemToRemove.tempId) {
+        removeDocumentRef(itemToRemove.tempId)
+      }
+      
       // Eliminar el elemento del estado local
       const newItems = [...items]
       newItems.splice(index, 1)
@@ -179,17 +209,272 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
     setItems(newItems)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleBasicEducationSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     // Prevenir múltiples envíos
-    if (loading) return
+    if (basicLoading) return
     
-    setLoading(true)
+    setBasicLoading(true)
 
     try {
+      // Filtrar solo educación básica
+      const basicEducationItems = items.filter(item => item.education_type === "basic")
+      
       // Validar que no haya campos obligatorios vacíos
-      const invalidItems = items.filter(item => {
+      const invalidItems = basicEducationItems.filter(item => {
+        return !item.institution.trim() || 
+          !item.degree.trim() || 
+          !item.education_type.trim() ||
+          !item.level.trim() ||
+          (item.level === "OTHER" && !item.description?.trim())
+      })
+
+      if (invalidItems.length > 0) {
+        notifications.error.validation("Todos los campos obligatorios deben estar completos en educación básica")
+        setBasicLoading(false)
+        return
+      }
+
+      // Guardar cada elemento individualmente para evitar duplicación
+      const savedItems = await saveEducationDataIndividually(basicEducationItems)
+      
+      // Asociar documentos pendientes con los registros guardados
+      try {
+        await associateAllDocumentsWithRecords(savedItems, 'education')
+      } catch (error) {
+        console.error("Error al asociar documentos:", error)
+      }
+      
+      // Actualizar los items con los IDs reales de la base de datos
+      const updatedItems = [...items]
+      savedItems.forEach(savedItem => {
+        const index = updatedItems.findIndex(item => 
+          item.institution === savedItem.institution &&
+          item.degree === savedItem.degree &&
+          item.education_type === savedItem.education_type &&
+          !item.id
+        )
+        if (index !== -1) {
+          updatedItems[index] = { ...updatedItems[index], id: savedItem.id }
+        }
+      })
+      setItems(updatedItems)
+      
+      notifications.success.save("Educación básica guardada exitosamente")
+      
+    } catch (error) {
+      console.error("Error al guardar educación básica:", error)
+      notifications.error.save("la educación básica")
+    } finally {
+      setBasicLoading(false)
+    }
+  }
+
+  // Función para guardar cada elemento individualmente y evitar duplicación
+  const saveEducationDataIndividually = async (educationItems: any[]) => {
+    const savedItems = []
+    
+    for (const item of educationItems) {
+      // Verificar si ya existe un elemento con la misma institución, título y tipo
+      const { data: existingEducation, error: checkError } = await supabase
+        .from("education")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("institution", item.institution.trim())
+        .eq("degree", item.degree.trim())
+        .eq("education_type", item.education_type)
+        .single()
+
+      if (checkError && checkError.code !== "PGRST116") {
+        console.error("Error checking existing education:", checkError)
+        continue
+      }
+
+      // Preparar datos limpios
+      const cleanData = {
+        user_id: userId,
+        education_type: item.education_type,
+        institution: item.institution.trim(),
+        degree: item.degree.trim(),
+        field_of_study: item.field_of_study?.trim() || null,
+        level: item.level,
+        graduation_date: item.graduation_date || null,
+        start_date: item.start_date || null,
+        end_date: item.current ? null : item.end_date || null,
+        current: Boolean(item.current),
+        semesters_completed: item.semesters_completed ? Number(item.semesters_completed) : null,
+        graduated: Boolean(item.graduated),
+        professional_card_number: item.professional_card_number ? String(item.professional_card_number).trim() || null : null,
+        description: item.description ? String(item.description).trim() || null : null,
+        institution_country: item.institution_country || "Colombia",
+        title_validated: Boolean(item.title_validated),
+        ies_code: item.ies_code ? String(item.ies_code).trim() || null : null,
+        academic_modality: item.academic_modality ? String(item.academic_modality).trim() || null : null,
+        document_url: item.document_url || null // Agregar document_url
+      }
+
+      console.log("🔥 GUARDANDO EDUCACIÓN:")
+      console.log("🔥 - Institution:", item.institution)
+      console.log("🔥 - Degree:", item.degree)
+      console.log("🔥 - document_url en item:", item.document_url)
+      console.log("🔥 - cleanData completo:", cleanData)
+      console.log("🔥 - document_url en cleanData:", cleanData.document_url)
+
+      let savedItem
+      if (existingEducation) {
+        // Actualizar registro existente
+        const { data, error } = await supabase
+          .from("education")
+          .update(cleanData)
+          .eq("id", existingEducation.id)
+          .select()
+          .single()
+
+        if (error) {
+          console.error("Error updating education:", error)
+          throw error
+        }
+        
+        savedItem = data
+      } else {
+        // Crear nuevo registro
+        const { data, error } = await supabase
+          .from("education")
+          .insert(cleanData)
+          .select()
+          .single()
+
+        if (error) {
+          console.error("Error inserting education:", error)
+          throw error
+        }
+        
+        savedItem = data
+      }
+
+      // Agregar información temporal para el mapeo de documentos
+      if (!item.id) {
+        savedItem.tempId = item.tempId || `${item.education_type}_${savedItems.length + 1}`
+      }
+      
+      savedItems.push(savedItem)
+    }
+    
+    return savedItems
+  }
+
+  // Función común para guardar datos de educación
+  const saveEducationData = async (educationItems: any[]) => {
+    // Obtener educaciones existentes para comparar
+    const { data: existingEducations, error: fetchError } = await supabase
+      .from("education")
+      .select("*")
+      .eq("user_id", userId)
+
+    if (fetchError) throw fetchError
+
+    // Preparar datos para upsert
+    const educationData = educationItems.map((item) => {
+      // Buscar si ya existe una educación similar
+      const existingItem = existingEducations?.find(existing => 
+        existing.institution === item.institution &&
+        existing.degree === item.degree &&
+        existing.education_type === item.education_type
+      )
+
+      // Asegurarse de que los campos de fecha sean null si están vacíos
+      const graduation_date = item.graduation_date || null
+      const start_date = item.start_date || null
+      const end_date = item.current ? null : item.end_date || null
+
+      // Limpiar y validar datos antes del upsert
+      const cleanData = {
+        id: existingItem?.id || item.id || undefined, // Usar ID existente si lo hay
+        user_id: userId,
+        education_type: item.education_type,
+        institution: item.institution.trim(),
+        degree: item.degree.trim(),
+        field_of_study: item.field_of_study?.trim() || null,
+        level: item.level,
+        graduation_date,
+        start_date,
+        end_date,
+        current: Boolean(item.current),
+        semesters_completed: item.semesters_completed ? Number(item.semesters_completed) : null,
+        graduated: Boolean(item.graduated),
+        professional_card_number: item.professional_card_number ? String(item.professional_card_number).trim() || null : null,
+        description: item.description ? String(item.description).trim() || null : null,
+        institution_country: item.institution_country || "Colombia",
+        title_validated: Boolean(item.title_validated),
+        ies_code: item.ies_code ? String(item.ies_code).trim() || null : null,
+        academic_modality: item.academic_modality ? String(item.academic_modality).trim() || null : null,
+      }
+
+      // Eliminar campos undefined para evitar problemas con Supabase
+      Object.keys(cleanData).forEach(key => {
+        if (cleanData[key as keyof typeof cleanData] === undefined) {
+          delete cleanData[key as keyof typeof cleanData]
+        }
+      })
+
+      return cleanData
+    })
+
+    // Separar inserts y updates para mejor control
+    const insertsData = educationData.filter(item => !item.id)
+    const updatesData = educationData.filter(item => item.id)
+
+    // Primero hacer inserts (sin ID)
+    if (insertsData.length > 0) {
+      const { error: insertError } = await supabase
+        .from("education")
+        .insert(insertsData)
+      
+      if (insertError) {
+        console.error("Error en insert:", insertError)
+        throw insertError
+      }
+    }
+
+    // Luego hacer updates (con ID)
+    if (updatesData.length > 0) {
+      for (const updateItem of updatesData) {
+        const { error: updateError } = await supabase
+          .from("education")
+          .update(updateItem)
+          .eq("id", updateItem.id)
+        
+        if (updateError) {
+          console.error("Error en update:", updateError)
+          throw updateError
+        }
+      }
+    }
+
+    // Actualizar caché local
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`education/${userId}`, JSON.stringify(educationItems))
+    }
+
+    // Refrescar datos desde la base de datos
+    refetchEducations()
+  }
+
+  const handleHigherEducationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    // Prevenir múltiples envíos
+    if (higherLoading) return
+    
+    setHigherLoading(true)
+
+    try {
+      // Filtrar solo educación superior
+      const higherEducationItems = items.filter(item => item.education_type === "higher")
+      
+      // Validar que no haya campos obligatorios vacíos
+      const invalidItems = higherEducationItems.filter(item => {
         const basicValidation = !item.institution.trim() || 
           !item.degree.trim() || 
           !item.education_type.trim() ||
@@ -197,159 +482,53 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
           (item.level === "OTHER" && !item.description?.trim())
 
         // Validación adicional para educación superior
-        if (item.education_type === "higher") {
-          return basicValidation || 
-            !item.field_of_study?.trim() ||
-            (!item.graduated && !item.current && !item.semesters_completed)
-        }
-
-        return basicValidation
+        return basicValidation || 
+          !item.field_of_study?.trim() ||
+          (!item.graduated && !item.current && !item.semesters_completed)
       })
       
       if (invalidItems.length > 0) {
-        const hasHigherEducation = invalidItems.some(item => item.education_type === "higher")
-        const message = hasHigherEducation 
-          ? "Para educación superior: por favor complete institución, título, área de estudio, nivel académico y estado de graduación"
-          : "Por favor complete todos los campos obligatorios: institución, título, tipo de educación y nivel académico"
-        
-        notifications.error.validation(message)
-        setLoading(false)
+        notifications.error.validation("Para educación superior: por favor complete institución, título, área de estudio, nivel académico y estado de graduación")
+        setHigherLoading(false)
         return
       }
 
-      // Obtener educaciones existentes para comparar
-      const { data: existingEducations, error: fetchError } = await supabase
-        .from("education")
-        .select("*")
-        .eq("user_id", userId)
-
-      if (fetchError) throw fetchError
-
-      // Preparar datos para upsert
-      const educationData = items.map((item) => {
-        // Buscar si ya existe una educación similar
-        const existingItem = existingEducations?.find(existing => 
-          existing.institution === item.institution &&
-          existing.degree === item.degree &&
-          existing.education_type === item.education_type
+      // Guardar cada elemento individualmente para evitar duplicación
+      const savedItems = await saveEducationDataIndividually(higherEducationItems)
+      
+      // Asociar documentos pendientes con los registros guardados
+      try {
+        await associateAllDocumentsWithRecords(savedItems, 'education')
+      } catch (error) {
+        console.error("Error al asociar documentos:", error)
+      }
+      
+      // Actualizar los items con los IDs reales de la base de datos
+      const updatedItems = [...items]
+      savedItems.forEach((savedItem: any) => {
+        const index = updatedItems.findIndex(item => 
+          item.institution === savedItem.institution &&
+          item.degree === savedItem.degree &&
+          item.education_type === savedItem.education_type &&
+          !item.id
         )
-
-        // Asegurarse de que los campos de fecha sean null si están vacíos
-        const graduation_date = item.graduation_date || null
-        const start_date = item.start_date || null
-        const end_date = item.current ? null : item.end_date || null
-
-        // Limpiar y validar datos antes del upsert
-        const cleanData = {
-          id: existingItem?.id || item.id || undefined, // Usar ID existente si lo hay
-          user_id: userId,
-          education_type: item.education_type,
-          institution: item.institution.trim(),
-          degree: item.degree.trim(),
-          field_of_study: item.field_of_study?.trim() || null,
-          level: item.level,
-          graduation_date,
-          start_date,
-          end_date,
-          current: Boolean(item.current),
-          semesters_completed: item.semesters_completed ? Number(item.semesters_completed) : null,
-          graduated: Boolean(item.graduated),
-          professional_card_number: item.professional_card_number ? String(item.professional_card_number).trim() || null : null,
-          description: item.description ? String(item.description).trim() || null : null,
-          institution_country: item.institution_country || "Colombia",
-          title_validated: Boolean(item.title_validated),
-          ies_code: item.ies_code ? String(item.ies_code).trim() || null : null,
-          academic_modality: item.academic_modality ? String(item.academic_modality).trim() || null : null,
+        if (index !== -1) {
+          updatedItems[index] = { ...updatedItems[index], id: savedItem.id }
         }
-
-        // Eliminar campos undefined para evitar problemas con Supabase
-        Object.keys(cleanData).forEach(key => {
-          if (cleanData[key as keyof typeof cleanData] === undefined) {
-            delete cleanData[key as keyof typeof cleanData]
-          }
-        })
-
-        return cleanData
       })
-
-      console.log("Datos limpios para upsert:", educationData)
-
-      // Separar inserts y updates para mejor control
-      const insertsData = educationData.filter(item => !item.id)
-      const updatesData = educationData.filter(item => item.id)
-
-      console.log("Datos para insertar:", insertsData)
-      console.log("Datos para actualizar:", updatesData)
-
-      // Primero hacer inserts (sin ID)
-      if (insertsData.length > 0) {
-        const { error: insertError } = await supabase
-          .from("education")
-          .insert(insertsData)
-        
-        if (insertError) {
-          console.error("Error en insert:", insertError)
-          throw insertError
-        }
-      }
-
-      // Luego hacer updates (con ID)
-      if (updatesData.length > 0) {
-        for (const updateItem of updatesData) {
-          const { error: updateError } = await supabase
-            .from("education")
-            .update(updateItem)
-            .eq("id", updateItem.id)
-          
-          if (updateError) {
-            console.error("Error en update:", updateError)
-            throw updateError
-          }
-        }
-      }
-
-      // Update profile status
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({ education_completed: true })
-        .eq("id", userId)
-
-      if (profileError) throw profileError
-
-      // Limpiar cache después de guardar exitosamente
-      clearCache()
+      setItems(updatedItems)
       
-      // Refrescar datos de la base de datos
-      refetchEducations()
+      notifications.success.save("Educación superior guardada exitosamente")
       
-      notifications.success.save("Información educativa")
-
-      // Esperar un momento antes de refrescar para que el usuario vea el mensaje de éxito
-      setTimeout(() => {
-        router.refresh()
-      }, 1500)
-    } catch (error: any) {
-      console.error("=== ERROR DETALLADO EN EDUCATION-FORM ===")
-      console.error("Error completo:", error)
-      console.error("Error message:", error.message)
-      console.error("Error details:", error.details)
-      console.error("Error code:", error.code)
-      console.error("Error hint:", error.hint)
-      console.error("Error stack:", error.stack)
-      console.error("Error name:", error.name)
-      console.error("Error toString:", error.toString())
-      console.error("=== FIN ERROR DETALLADO ===")
-      
-      // Mostrar mensaje de error genérico hasta identificar el problema específico
-      const errorMessage = "Error al guardar la información educativa. Verifica los logs de la consola."
-      
-      console.error("Mensaje de error para el usuario:", errorMessage)
-      notifications.error.generic(errorMessage)
+    } catch (error) {
+      console.error("Error al guardar educación superior:", error)
+      notifications.error.save("la educación superior")
     } finally {
-      setLoading(false)
+      setHigherLoading(false)
     }
   }
 
+  // Filtrar elementos por tipo de educación
   const basicEducationItems = items.filter((item) => item.education_type === "basic")
   const higherEducationItems = items.filter((item) => item.education_type === "higher")
 
@@ -374,7 +553,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
         <CardTitle>Formación Académica</CardTitle>
         <CardDescription>Agregue su información educativa completa</CardDescription>
       </CardHeader>
-      <form onSubmit={handleSubmit}>
+      <div className="w-full">{/* Contenedor sin form global */}
         <CardContent className="space-y-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid grid-cols-2 mb-4">
@@ -500,15 +679,30 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                     </div>
 
                     <div className="space-y-4">
-                      <AutoDocumentUpload
+                      <RobustDocumentUpload
+                        ref={(ref) => {
+                          if (ref && item.tempId) {
+                            addDocumentRef(item.tempId, ref)
+                          }
+                        }}
                         userId={userId}
                         documentType="basic_education_certificate"
                         formType="education"
-                        itemIndex={index}
+                        recordId={item.id || item.tempId} // Usar tempId si no hay ID real
+                        itemIndex={itemIndex} // Usar itemIndex (índice real) no index (índice del filtro)
                         label="Certificado de Educación Básica/Media"
                         required
+                        initialDocumentUrl={item.document_url}
                         onUploadSuccess={(url: string) => {
-                          console.log("Documento de educación básica subido exitosamente:", url)
+                          console.log("🔥 DOCUMENTO EDUCACIÓN BÁSICA SUBIDO - URL recibida:", url)
+                          console.log("🔥 DOCUMENTO EDUCACIÓN BÁSICA SUBIDO - Guardando en índice REAL:", itemIndex)
+                          console.log("🔥 DOCUMENTO EDUCACIÓN BÁSICA SUBIDO - Índice del filtro:", index)
+                          console.log("🔥 DOCUMENTO EDUCACIÓN BÁSICA SUBIDO - Item actual antes:", items[itemIndex])
+                          
+                          // Actualizar el document_url en el item actual usando itemIndex (índice real)
+                          handleItemChange(itemIndex, 'document_url', url)
+                          
+                          console.log("🔥 DOCUMENTO EDUCACIÓN BÁSICA SUBIDO - Item actual después:", items[itemIndex])
                         }}
                         onUploadError={(error: string) => {
                           console.error("Error al subir documento de educación básica:", error)
@@ -523,11 +717,13 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                 <Plus className="h-4 w-4 mr-2" /> Agregar Educación Básica/Media
               </Button>
 
-              <div className="flex justify-end mt-4">
-                <Button type="button" onClick={() => setActiveTab("higher")}>
-                  Siguiente: Educación Superior
-                </Button>
-              </div>
+              <form onSubmit={handleBasicEducationSubmit} className="mt-4">
+                <div className="flex justify-end">
+                  <Button type="submit" disabled={basicLoading}>
+                    {basicLoading ? "Guardando..." : "Guardar Educación Básica/Media"}
+                  </Button>
+                </div>
+              </form>
             </TabsContent>
 
             <TabsContent value="higher" className="space-y-6">
@@ -775,15 +971,29 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                     )}
 
                     <div className="space-y-4">
-                      <AutoDocumentUpload
+                      <RobustDocumentUpload
+                        ref={(ref) => {
+                          if (ref && item.tempId) {
+                            addDocumentRef(item.tempId, ref)
+                          }
+                        }}
                         userId={userId}
                         documentType="higher_education_diploma"
                         formType="education"
-                        itemIndex={index}
+                        recordId={item.id || item.tempId} // Usar tempId si no hay ID real
+                        itemIndex={itemIndex} // Usar itemIndex (índice real) no index (índice del filtro)
                         label="Diploma de Educación Superior"
                         required
+                        initialDocumentUrl={item.document_url}
                         onUploadSuccess={(url: string) => {
-                          console.log("Documento de educación superior subido exitosamente:", url)
+                          console.log("🔥 DOCUMENTO EDUCACIÓN SUPERIOR SUBIDO - URL recibida:", url)
+                          console.log("🔥 DOCUMENTO EDUCACIÓN SUPERIOR SUBIDO - Guardando en índice:", itemIndex)
+                          console.log("🔥 DOCUMENTO EDUCACIÓN SUPERIOR SUBIDO - Item actual antes:", items[itemIndex])
+                          
+                          // Actualizar el document_url en el item actual
+                          handleItemChange(itemIndex, 'document_url', url)
+                          
+                          console.log("🔥 DOCUMENTO EDUCACIÓN SUPERIOR SUBIDO - Item actual después:", items[itemIndex])
                         }}
                         onUploadError={(error: string) => {
                           console.error("Error al subir documento de educación superior:", error)
@@ -798,18 +1008,20 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                 <Plus className="h-4 w-4 mr-2" /> Agregar Educación Superior
               </Button>
 
-              <div className="flex justify-between mt-4">
-                <Button type="button" variant="outline" onClick={() => setActiveTab("basic")}>
-                  Anterior: Educación Básica
-                </Button>
-                <Button type="submit" disabled={loading}>
-                  {loading ? "Guardando..." : "Guardar Formación Académica"}
-                </Button>
-              </div>
+              <form onSubmit={handleHigherEducationSubmit} className="mt-4">
+                <div className="flex justify-between">
+                  <Button type="button" variant="outline" onClick={() => setActiveTab("basic")}>
+                    Anterior: Educación Básica
+                  </Button>
+                  <Button type="submit" disabled={higherLoading}>
+                    {higherLoading ? "Guardando..." : "Guardar Educación Superior"}
+                  </Button>
+                </div>
+              </form>
             </TabsContent>
           </Tabs>
         </CardContent>
-      </form>
+      </div>
     </Card>
   )
 }

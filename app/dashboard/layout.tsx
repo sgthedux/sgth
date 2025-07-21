@@ -62,18 +62,6 @@ function DashboardContent({
 
     const loadUser = async () => {
       try {
-        // Intentar obtener usuario del localStorage primero (solo en el cliente)
-        if (typeof window !== 'undefined') {
-          const cachedUser = localStorage.getItem("currentUser")
-          if (cachedUser) {
-            const parsedUser = JSON.parse(cachedUser)
-            if (isComponentMounted) {
-              setUser(parsedUser)
-              setLoading(false)
-            }
-          }
-        }
-
         // Obtener usuario fresco de Supabase
         const {
           data: { session },
@@ -128,18 +116,34 @@ function DashboardContent({
     return searchParams.get("tab") || "personal"
   }, [searchParams])
 
-  // Mostrar estado de carga solo si no hay datos en caché
-  if (loading && (typeof window === 'undefined' || !localStorage.getItem("currentUser"))) {
-    return <LoadingState message="Cargando usuario..." />
+  const [cachedProfile, setCachedProfile] = useState<any>({})
+
+  // Cargar datos en caché cuando se monta el componente
+  useEffect(() => {
+    if (typeof window !== 'undefined' && user?.id) {
+      const cached = localStorage.getItem(`profile/${user.id}`)
+      if (cached) {
+        try {
+          setCachedProfile(JSON.parse(cached))
+        } catch (error) {
+          console.error("Error parsing cached profile:", error)
+        }
+      }
+    }
+  }, [user?.id])
+
+  // Mostrar estado de carga unificado para prevenir errores de hidratación
+  if (!isMounted) {
+    return <LoadingState message="Cargando..." />
   }
 
-  // Prevenir hidratación incorrecta
-  if (!isMounted) {
-    return <LoadingState message="Inicializando..." />
+  // Si está cargando el usuario, mostrar carga
+  if (loading) {
+    return <LoadingState message="Cargando..." />
   }
 
   // Usar datos en caché mientras se cargan los datos frescos
-  const profile = allProfileData?.profile || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem(`profile/${user?.id}`) || "{}") : {})
+  const profile = allProfileData?.profile || cachedProfile
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -198,22 +202,44 @@ function ProfileContent({
   activeTab: string
   children: React.ReactNode
 }) {
+  const [cachedData, setCachedData] = useState<any>({})
+
+  // Cargar datos en caché cuando se monta el componente
+  useEffect(() => {
+    if (typeof window !== 'undefined' && userId) {
+      const loadCachedData = () => {
+        try {
+          const personalInfo = localStorage.getItem(`personalInfo/${userId}`)
+          const education = localStorage.getItem(`education/${userId}`)
+          const experience = localStorage.getItem(`experience/${userId}`)
+          const languages = localStorage.getItem(`languages/${userId}`)
+          
+          setCachedData({
+            personalInfo: personalInfo ? JSON.parse(personalInfo) : null,
+            education: education ? JSON.parse(education) : null,
+            experience: experience ? JSON.parse(experience) : null,
+            languages: languages ? JSON.parse(languages) : null,
+          })
+        } catch (error) {
+          console.error("Error loading cached data:", error)
+        }
+      }
+      
+      loadCachedData()
+    }
+  }, [userId])
+
   // Usar datos en caché si están disponibles
   const getDataFromCacheOrFresh = (key: string) => {
     if (allProfileData && allProfileData[key]) {
       return allProfileData[key]
     }
 
-    try {
-      if (typeof window !== 'undefined') {
-        const cachedData = localStorage.getItem(`${key}/${userId}`)
-        return cachedData ? JSON.parse(cachedData) : key === "profile" ? {} : []
-      }
-      return key === "profile" ? {} : []
-    } catch (e) {
-      console.error(`Error getting ${key} from cache:`, e)
-      return key === "profile" ? {} : []
+    if (cachedData[key]) {
+      return cachedData[key]
     }
+
+    return key === "profile" ? {} : []
   }
 
   // Obtener datos del perfil
@@ -222,16 +248,42 @@ function ProfileContent({
   const experience = getDataFromCacheOrFresh("experience")
   const languages = getDataFromCacheOrFresh("languages")
 
+  const [showLoading, setShowLoading] = useState(true)
+
+  // Determinar si mostrar loading basado en datos en caché
+  useEffect(() => {
+    if (typeof window !== 'undefined' && userId) {
+      const hasCache = 
+        localStorage.getItem(`profile/${userId}`) ||
+        localStorage.getItem(`personal_info/${userId}`) ||
+        localStorage.getItem(`education/${userId}`) ||
+        localStorage.getItem(`experience/${userId}`) ||
+        localStorage.getItem(`languages/${userId}`)
+      
+      // Solo mostrar loading si está cargando Y no hay cache Y no es la primera carga
+      setShowLoading(isLoading && !hasCache && activeSection === "profile")
+    } else {
+      setShowLoading(isLoading && activeSection === "profile")
+    }
+  }, [isLoading, userId, activeSection])
+
+  // Resetear el estado de loading cuando cambie la sección
+  useEffect(() => {
+    if (activeSection !== "profile") {
+      setShowLoading(false)
+    }
+  }, [activeSection])
+
   // Mostrar indicador de carga solo si no hay datos en caché
-  const showLoading =
-    isLoading &&
-    (typeof window === 'undefined' || (
-      !localStorage.getItem(`profile/${userId}`) &&
-      !localStorage.getItem(`personal_info/${userId}`) &&
-      !localStorage.getItem(`education/${userId}`) &&
-      !localStorage.getItem(`experience/${userId}`) &&
-      !localStorage.getItem(`languages/${userId}`)
-    ))
+  // const showLoading =
+  //   isLoading &&
+  //   (typeof window === 'undefined' || (
+  //     !localStorage.getItem(`profile/${userId}`) &&
+  //     !localStorage.getItem(`personal_info/${userId}`) &&
+  //     !localStorage.getItem(`education/${userId}`) &&
+  //     !localStorage.getItem(`experience/${userId}`) &&
+  //     !localStorage.getItem(`languages/${userId}`)
+  //   ))
 
   return (
     <div className="w-full max-w-full overflow-hidden">

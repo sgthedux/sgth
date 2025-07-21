@@ -9,13 +9,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertCircle, Plus } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AutoDocumentUpload } from "@/components/profile/auto-document-upload"
+import { RobustDocumentUpload } from "@/components/profile/robust-document-upload"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { DeleteConfirmation } from "@/components/delete-confirmation"
 import { ValidatedInput } from "@/components/ui/validated-input"
 import { validationRules } from "@/lib/validations"
 import { useFormCache } from "@/hooks/use-form-cache"
 import { useDBData } from "@/hooks/use-db-data"
+import { useDocumentRefs } from "@/hooks/use-document-refs"
 import { notifications } from "@/lib/notifications"
 
 interface LanguageFormProps {
@@ -26,12 +27,15 @@ interface LanguageFormProps {
     speaking_level: string
     reading_level: string
     writing_level: string
+    document_url?: string
+    tempId?: string
   }>
 }
 
 export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
   const router = useRouter()
   const supabase = createClient()
+  const { addDocumentRef, removeDocumentRef } = useDocumentRefs()
 
   // Configuración inicial de datos memoizada
   const initialData = useMemo(() => [{
@@ -40,6 +44,8 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
     speaking_level: "",
     reading_level: "",
     writing_level: "",
+    document_url: "",
+    tempId: `language_${Date.now()}` // Agregar tempId para documentos pendientes
   }], [])
 
   // Cache local de datos del formulario
@@ -69,13 +75,30 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
   // Cargar datos existentes cuando estén disponibles
   useEffect(() => {
     if (dbLanguages && dbLanguages.length > 0 && items.length === 1 && !items[0].language) {
-      setItems(dbLanguages)
+      console.log("🔄 Cargando datos de idiomas desde BD:", dbLanguages)
+      console.log("🔄 Datos incluyen document_url:", dbLanguages.map(lang => ({
+        language: lang.language,
+        document_url: lang.document_url
+      })))
+      
+      // Agregar tempId y document_url a datos existentes si no los tienen
+      const itemsWithTempId = dbLanguages.map((item: any) => ({
+        ...item,
+        document_url: item.document_url || "",
+        tempId: item.tempId || `language_${item.id || Date.now()}`
+      }))
+      setItems(itemsWithTempId)
     }
   }, [dbLanguages, items, setItems])
 
   const [loading, setLoading] = useState(false)
 
   const handleAddItem = () => {
+    const timestamp = Date.now()
+    const random = Math.random().toString(36).substr(2, 9)
+    const tempId = `language_${timestamp}_${random}`
+    console.log("🆕 Creando nuevo idioma con tempId:", tempId)
+    
     const newItems = [
       ...items,
       {
@@ -84,6 +107,8 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
         speaking_level: "",
         reading_level: "",
         writing_level: "",
+        document_url: "",
+        tempId: tempId,
       },
     ]
     setItems(newItems)
@@ -92,6 +117,13 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
   const handleRemoveItem = async (index: number) => {
     try {
       const newItems = [...items]
+      const itemToRemove = newItems[index]
+      
+      // Limpiar referencia del documento si existe
+      if (itemToRemove.tempId) {
+        removeDocumentRef(itemToRemove.tempId)
+      }
+      
       newItems.splice(index, 1)
       setItems(newItems)
       notifications.success.delete(`Idioma ${index + 1}`)
@@ -107,14 +139,29 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
     setItems(newItems)
   }
 
+  // Callback para cuando se sube un documento
+  const handleDocumentUpload = (index: number, documentUrl: string) => {
+    console.log("🔥 DOCUMENTO IDIOMA SUBIDO - URL recibida:", documentUrl)
+    console.log("🔥 DOCUMENTO IDIOMA SUBIDO - Guardando en índice:", index)
+    console.log("🔥 DOCUMENTO IDIOMA SUBIDO - Item actual antes:", items[index])
+    
+    const newItems = [...items]
+    newItems[index] = { ...newItems[index], document_url: documentUrl }
+    setItems(newItems)
+    
+    console.log("🔥 DOCUMENTO IDIOMA SUBIDO - Item actual después:", newItems[index])
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (loading) return
     
+    console.log("🔄 INICIANDO GUARDADO DE IDIOMAS")
     setLoading(true)
 
     try {
+      console.log("🔄 Validando campos obligatorios...")
       // Validar que no haya campos obligatorios vacíos
       const invalidItems = items.filter(item => 
         !item.language.trim() || 
@@ -124,11 +171,13 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
       )
       
       if (invalidItems.length > 0) {
+        console.log("❌ Validación fallida")
         notifications.error.validation("Por favor complete todos los campos: idioma y niveles de habla, lectura y escritura")
         setLoading(false)
         return
       }
 
+      console.log("🔄 Obteniendo idiomas existentes...")
       // Obtener idiomas existentes para comparar
       const { data: existingLanguages, error: fetchError } = await supabase
         .from("languages")
@@ -137,6 +186,7 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
 
       if (fetchError) throw fetchError
 
+      console.log("🔄 Preparando datos para guardado...")
       // Preparar datos para upsert
       const languageData = items.map((item) => {
         // Buscar si ya existe un idioma similar
@@ -151,14 +201,21 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
           speaking_level: item.speaking_level,
           reading_level: item.reading_level,
           writing_level: item.writing_level,
+          document_url: item.document_url || null
         }
       })
+
+      console.log("🔥 GUARDANDO IDIOMAS:")
+      console.log("🔥 - items originales:", items)
+      console.log("🔥 - languageData con document_url:", languageData)
+      console.log("🔥 - document_url en cada item:", languageData.map(item => ({ language: item.language, document_url: item.document_url })))
 
       // Filtrar duplicados
       const uniqueLanguageData = languageData.filter((item, index, self) =>
         index === self.findIndex((l) => l.language === item.language)
       )
 
+      console.log("🔄 Eliminando idiomas que ya no están en la lista...")
       // Primero, eliminar idiomas que ya no están en la lista
       const currentIds = uniqueLanguageData.map(item => item.id).filter(Boolean)
       const existingIds = existingLanguages?.map(item => item.id) || []
@@ -169,7 +226,7 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
           .from("languages")
           .delete()
           .in("id", idsToDelete)
-          if (deleteError) throw deleteError
+        if (deleteError) throw deleteError
       }
 
       console.log("=== DEBUG LANGUAGE SAVE ===")
@@ -182,47 +239,88 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
       console.log("=== END DEBUG ===")
 
       // Manejar el upsert de forma más robusta
+      const savedLanguages: any[] = []
       for (const langData of uniqueLanguageData) {
-        if (langData.id) {
-          // Actualizar idioma existente
-          const { error } = await supabase
-            .from("languages")
-            .update(langData)
-            .eq("id", langData.id)
-          
-          if (error) throw error
-        } else {
-          // Insertar nuevo idioma
-          const { id, ...insertData } = langData
-          const { error } = await supabase
-            .from("languages")
-            .insert(insertData)
-          
-          if (error) throw error
+        try {
+          console.log(`🔥 Guardando idioma: ${langData.language}`)
+          if (langData.id) {
+            // Actualizar idioma existente
+            const { data, error } = await supabase
+              .from("languages")
+              .update(langData)
+              .eq("id", langData.id)
+              .select()
+              .single()
+            
+            if (error) {
+              console.error("Error updating language:", error)
+              throw error
+            }
+            savedLanguages.push(data)
+            console.log(`✅ Idioma actualizado: ${langData.language}`)
+          } else {
+            // Insertar nuevo idioma
+            const { id, ...insertData } = langData
+            const { data, error } = await supabase
+              .from("languages")
+              .insert(insertData)
+              .select()
+              .single()
+            
+            if (error) {
+              console.error("Error inserting language:", error)
+              throw error
+            }
+            savedLanguages.push(data)
+            console.log(`✅ Idioma insertado: ${langData.language}`)
+          }
+        } catch (error) {
+          console.error(`❌ Error saving language ${langData.language}:`, error)
+          // Continuar con los siguientes idiomas
+          continue
         }
       }
 
+      console.log("🔥 TOTAL IDIOMAS GUARDADOS:", savedLanguages.length)
+
+      console.log("🔄 Actualizando items con IDs reales...")
+      // Actualizar los items con los IDs reales si es necesario
+      const updatedItems = items.map(item => {
+        const savedLang = savedLanguages.find(lang => lang.language === item.language)
+        return savedLang?.id ? { ...item, id: savedLang.id } : item
+      })
+      
+      setItems(updatedItems)
+      console.log("✅ Items actualizados con IDs")
+
+      console.log("🔄 Actualizando perfil...")
       // Update profile status
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({ languages_completed: true })
-        .eq("id", userId)
+      try {
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .update({ languages_completed: true })
+          .eq("id", userId)
 
-      if (profileError) throw profileError
+        if (profileError) {
+          console.error("Error al actualizar el perfil:", profileError)
+        } else {
+          console.log("✅ Perfil actualizado")
+        }
+      } catch (profileErr) {
+        console.error("Error en actualización de perfil:", profileErr)
+      }
 
+      console.log("🔄 Limpiando cache...")
       // Limpiar cache después de guardar exitosamente
       clearCache()
       
-      // Refrescar datos de la base de datos
-      refetchLanguages()
-      
+      console.log("🔄 Mostrando notificación de éxito...")
       notifications.success.save("Información de idiomas")
-
-      // Esperar un momento antes de refrescar
-      setTimeout(() => {
-        router.refresh()
-      }, 1500)    } catch (error: any) {
-      console.error("Error al guardar idiomas:", error)
+      
+      console.log("✅ GUARDADO COMPLETADO - Quitando loading")
+      
+    } catch (error: any) {
+      console.error("❌ Error al guardar idiomas:", error)
       
       // Mostrar mensaje de error más amigable
       let errorMessage = "Ocurrió un error inesperado al guardar la información de idiomas"
@@ -237,9 +335,12 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
         errorMessage = "Error en el sistema. Por favor contacta al administrador"
       }
       
-      notifications.error.generic(errorMessage)
+      notifications.error.save(errorMessage)
     } finally {
+      // SIEMPRE quitar loading, sin importar qué pase
+      console.log("🔄 FINALLY: Quitando loading...")
       setLoading(false)
+      console.log("✅ FINALLY: Loading quitado")
     }
   }
 
@@ -389,12 +490,21 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
 
                 {/* Subida de Documentos */}
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Certificado de Idioma (Opcional)</Label>                  <AutoDocumentUpload
+                  <Label className="text-sm font-medium">Certificado de Idioma (Opcional)</Label>
+                  <RobustDocumentUpload
+                    ref={(ref) => {
+                      if (ref && item.tempId) {
+                        addDocumentRef(item.tempId, ref)
+                      }
+                    }}
                     userId={userId}
                     formType="language"
+                    recordId={item.id || item.tempId} // Usar tempId si no hay ID real
                     itemIndex={index}
                     documentType="language_certificate"
                     label="Certificado de Idioma (Opcional)"
+                    initialDocumentUrl={item.document_url}
+                    onUploadSuccess={(documentUrl) => handleDocumentUpload(index, documentUrl)}
                   />
                 </div>
               </div>

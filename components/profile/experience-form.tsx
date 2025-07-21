@@ -13,6 +13,7 @@ import { AlertCircle, Plus } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Textarea } from "@/components/ui/textarea"
 import { DocumentUpload } from "@/components/profile/document-upload"
+import { RobustDocumentUpload } from "@/components/profile/robust-document-upload"
 import { AutoDocumentUpload } from "@/components/profile/auto-document-upload"
 import { DatePicker } from "@/components/date-picker"
 import { DeleteConfirmation } from "@/components/delete-confirmation"
@@ -23,12 +24,14 @@ import { useUser } from "@/hooks/use-user"
 import { secureDB } from "@/lib/supabase/secure-client"
 import { useFormCache } from "@/hooks/use-form-cache"
 import { useDBData } from "@/hooks/use-db-data"
+import { useDocumentRefs } from "@/hooks/use-document-refs"
 import { notifications } from "@/lib/notifications"
 
 interface ExperienceFormProps {
   userId: string
   experiences?: Array<{
     id: string
+    tempId?: string
     company: string
     position: string
     start_date: string
@@ -42,6 +45,7 @@ interface ExperienceFormProps {
     company_phone?: string
     company_address?: string
     department?: string
+    document_url?: string | null
   }>
 }
 
@@ -53,6 +57,7 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
   // Configuración inicial de datos memoizada
   const initialData = useMemo(() => [{
     id: "",
+    tempId: undefined as string | undefined,
     company: "",
     position: "",
     start_date: "",
@@ -66,6 +71,7 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
     company_phone: "",
     company_address: "",
     department: "",
+    document_url: null,
   }], [])
 
   // Cache local de datos del formulario
@@ -95,17 +101,32 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
   // Cargar datos existentes cuando estén disponibles
   useEffect(() => {
     if (dbExperiences && dbExperiences.length > 0 && items.length === 1 && !items[0].company) {
+      console.log("🔄 Cargando datos de experiencia desde BD:", dbExperiences)
+      console.log("🔄 Datos incluyen document_url:", dbExperiences.map(exp => ({
+        company: exp.company,
+        position: exp.position,
+        document_url: exp.document_url
+      })))
       setItems(dbExperiences)
     }
   }, [dbExperiences, items, setItems])
 
   const [loading, setLoading] = useState(false)
 
+  // Hook para manejar referencias a documentos
+  const { addDocumentRef, removeDocumentRef, getAllDocumentUrls } = useDocumentRefs()
+
   const handleAddItem = () => {
+    const timestamp = Date.now()
+    const random = Math.random().toString(36).substr(2, 9)
+    const tempId = `experience_${timestamp}_${random}`
+    console.log("🆕 Creando nueva experiencia con tempId:", tempId)
+    
     const newItems = [
       ...items,
       {
         id: "",
+        tempId: tempId,
         company: "",
         position: "",
         start_date: "",
@@ -119,6 +140,7 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
         company_phone: "",
         company_address: "",
         department: "",
+        document_url: null,
       },
     ]
     setItems(newItems)
@@ -126,6 +148,14 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
 
   const handleRemoveItem = async (index: number) => {
     try {
+      // Obtener el item a eliminar
+      const itemToRemove = items[index]
+      
+      // Limpiar referencias de documentos si existe tempId
+      if (itemToRemove.tempId) {
+        removeDocumentRef(itemToRemove.tempId)
+      }
+      
       // Eliminar el elemento del estado local
       const newItems = [...items]
       newItems.splice(index, 1)
@@ -156,15 +186,112 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
     setItems(newItems)
   }
 
+  // Función para guardar cada elemento individualmente y evitar duplicación
+  const saveExperienceDataIndividually = async (experienceItems: any[]) => {
+    const savedItems = []
+    
+    for (const item of experienceItems) {
+      try {
+        // Verificar si ya existe una experiencia con la misma empresa, posición y fecha de inicio
+        const { data: existingExperience, error: checkError } = await supabase
+          .from("experience")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("company", item.company.trim())
+          .eq("position", item.position.trim())
+          .eq("start_date", item.start_date)
+          .single()
+
+        if (checkError && checkError.code !== "PGRST116") {
+          console.error("Error checking existing experience:", checkError)
+          continue
+        }
+
+        // Preparar datos limpios
+        const cleanData = {
+          user_id: userId,
+          company: item.company.trim(),
+          position: item.position.trim(),
+          start_date: item.start_date,
+          end_date: item.current ? null : item.end_date || null,
+          current: Boolean(item.current),
+          description: item.description?.trim() || null,
+          sector: item.sector || "private",
+          state: item.state?.trim() || null,
+          city: item.city?.trim() || null,
+          company_email: item.company_email?.trim() || null,
+          company_phone: item.company_phone?.trim() || null,
+          company_address: item.company_address?.trim() || null,
+          department: item.department?.trim() || null,
+          document_url: item.document_url || null // Usar la URL si existe
+        }
+
+        console.log("🔥 GUARDANDO EXPERIENCIA:")
+        console.log("🔥 - Company:", item.company)
+        console.log("🔥 - Position:", item.position)
+        console.log("🔥 - document_url en item:", item.document_url)
+        console.log("🔥 - cleanData completo:", cleanData)
+        console.log("🔥 - document_url en cleanData:", cleanData.document_url)
+
+        let savedItem
+        if (existingExperience) {
+          // Actualizar registro existente
+          const { data, error } = await supabase
+            .from("experience")
+            .update(cleanData)
+            .eq("id", existingExperience.id)
+            .select()
+            .single()
+
+          if (error) {
+            console.error("Error updating experience:", error)
+            throw error
+          }
+          
+          savedItem = data
+        } else {
+          // Crear nuevo registro
+          const { data, error } = await supabase
+            .from("experience")
+            .insert(cleanData)
+            .select()
+            .single()
+
+          if (error) {
+            console.error("Error inserting experience:", error)
+            throw error
+          }
+          
+          savedItem = data
+        }
+
+        // Agregar información temporal para el mapeo de documentos
+        if (!item.id) {
+          savedItem.tempId = item.tempId || `experience_${savedItems.length + 1}`
+        }
+        
+        savedItems.push(savedItem)
+      } catch (error) {
+        console.error("Error saving experience item:", error)
+        // Continuar con los siguientes items incluso si uno falla
+        continue
+      }
+    }
+    
+    return savedItems
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     // Prevenir múltiples envíos
     if (loading) return
     
+    console.log("🔄 INICIANDO GUARDADO DE EXPERIENCIA")
     setLoading(true)
 
     try {
+      console.log("🔄 Validando campos obligatorios...")
       // Validar que no haya campos obligatorios vacíos
       const invalidItems = items.filter(item => 
         !item.company.trim() || 
@@ -173,144 +300,72 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
       )
       
       if (invalidItems.length > 0) {
+        console.log("❌ Validación fallida")
         notifications.error.validation("Por favor complete todos los campos obligatorios: empresa, cargo y fecha de inicio")
         setLoading(false)
         return
       }
 
-      // Obtener experiencias existentes para comparar
-      const { data: existingExperiences, error: fetchError } = await supabase
-        .from("experience")
-        .select("*")
-        .eq("user_id", userId)
-
-      if (fetchError) throw fetchError
-
-      // Preparar datos para upsert
-      const experienceData = items.map((item) => {
-        // Buscar si ya existe una experiencia similar
-        const existingItem = existingExperiences?.find(existing => 
-          existing.company === item.company &&
-          existing.position === item.position &&
-          existing.start_date === item.start_date
+      console.log("🔄 Guardando elementos individualmente...")
+      // Guardar cada elemento individualmente para evitar duplicación
+      const savedItems = await saveExperienceDataIndividually(items)
+      console.log("✅ Elementos guardados:", savedItems.length)
+      
+      console.log("🔄 Actualizando items con IDs reales...")
+      // Actualizar los items con los IDs reales de la base de datos
+      const updatedItems = [...items]
+      savedItems.forEach((savedItem: any) => {
+        const index = updatedItems.findIndex(item => 
+          item.company === savedItem.company &&
+          item.position === savedItem.position &&
+          item.start_date === savedItem.start_date
         )
-
-        // Asegurarse de que los campos de fecha sean null si están vacíos
-        const start_date = item.start_date || null
-        const end_date = item.current ? null : item.end_date || null
-
-        return {
-          id: existingItem?.id || item.id || undefined, // Usar ID existente si lo hay
-          user_id: userId,
-          company: item.company,
-          position: item.position,
-          start_date,
-          end_date,
-          current: item.current,
-          description: item.description,
-          sector: item.sector,
-          state: item.state,
-          city: item.city,
-          company_email: item.company_email,
-          company_phone: item.company_phone,
-          company_address: item.company_address,
-          department: item.department,
+        
+        if (index !== -1) {
+          updatedItems[index] = { ...updatedItems[index], id: savedItem.id }
         }
       })
+      
+      setItems(updatedItems)
+      console.log("✅ Items actualizados con IDs")
+      
+      console.log("🔄 Mostrando notificación de éxito...")
+      notifications.success.save("Experiencia laboral guardada exitosamente")
+      
+      console.log("🔄 Actualizando perfil...")
+      // Actualizar el estado del perfil
+      try {
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .update({ experience_completed: true })
+          .eq("id", userId)
 
-      // Filtrar elementos duplicados basado en empresa, posición y fecha de inicio
-      const uniqueExperienceData = experienceData.filter((item, index, self) => 
-        index === self.findIndex(t => 
-          t.company === item.company && 
-          t.position === item.position && 
-          t.start_date === item.start_date
-        )
-      )
-
-      // Primero, eliminar experiencias que ya no están en la lista
-      const currentIds = uniqueExperienceData.map(item => item.id).filter(Boolean)
-      const existingIds = existingExperiences?.map(item => item.id) || []
-      const idsToDelete = existingIds.filter(id => !currentIds.includes(id))
-
-      if (idsToDelete.length > 0) {
-        const { error: deleteError } = await supabase
-          .from("experience")
-          .delete()
-          .in("id", idsToDelete)
-        
-        if (deleteError) throw deleteError
-      }
-
-      console.log("=== DEBUG EXPERIENCE SAVE ===")
-      console.log("userId:", userId)
-      console.log("items:", items)
-      console.log("items type:", typeof items)
-      console.log("items isArray:", Array.isArray(items))
-      console.log("experienceData:", experienceData)
-      console.log("uniqueExperienceData:", uniqueExperienceData)
-      console.log("=== END DEBUG ===")
-
-      // Manejar el upsert de forma más robusta
-      for (const expData of uniqueExperienceData) {
-        if (expData.id) {
-          // Actualizar experiencia existente
-          const { error } = await supabase
-            .from("experience")
-            .update(expData)
-            .eq("id", expData.id)
-          
-          if (error) throw error
+        if (profileError) {
+          console.error("Error al actualizar el perfil:", profileError)
         } else {
-          // Insertar nueva experiencia
-          const { id, ...insertData } = expData
-          const { error } = await supabase
-            .from("experience")
-            .insert(insertData)
-          
-          if (error) throw error
+          console.log("✅ Perfil actualizado")
         }
-      }
-
-      // Update profile status
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({ experience_completed: true })
-        .eq("id", userId)
-
-      if (profileError) throw profileError
-
-      // Limpiar cache después de guardar exitosamente
-      clearCache()
-      
-      // Refrescar datos de la base de datos
-      refetchExperiences()
-      
-      notifications.success.save("Experiencia laboral")
-
-      // Esperar un momento antes de refrescar para que el usuario vea el mensaje de éxito
-      setTimeout(() => {
-        router.refresh()
-      }, 1500)
-    } catch (error: any) {
-      console.error("Error al guardar experiencia:", error)
-      
-      // Mostrar mensaje de error más amigable
-      let errorMessage = "Ocurrió un error inesperado al guardar la experiencia laboral"
-      
-      if (error.message?.includes("duplicate key")) {
-        errorMessage = "Ya existe un registro de experiencia similar"
-      } else if (error.message?.includes("network") || error.message?.includes("fetch")) {
-        errorMessage = "Error de conexión. Verifica tu internet e intenta nuevamente"
-      } else if (error.message?.includes("unauthorized") || error.message?.includes("permission")) {
-        errorMessage = "No tienes permisos para realizar esta acción"
-      } else if (error.message?.includes("column") || error.message?.includes("schema")) {
-        errorMessage = "Error en el sistema. Por favor contacta al administrador"
+      } catch (profileErr) {
+        console.error("Error en actualización de perfil:", profileErr)
       }
       
-      notifications.error.generic(errorMessage)
+      console.log("✅ GUARDADO COMPLETADO - Quitando loading")
+      
+    } catch (error) {
+      console.error("❌ Error al guardar experiencia:", error)
+      notifications.error.save("Error al guardar la experiencia laboral")
     } finally {
+      // SIEMPRE quitar loading, sin importar qué pase
+      console.log("🔄 FINALLY: Quitando loading...")
       setLoading(false)
+      console.log("✅ FINALLY: Loading quitado")
     }
+  }
+
+  const handleResetForm = () => {
+    setItems(initialData)
+    // Limpiar caché
+    clearCache()
   }
 
   // Mostrar indicador de carga mientras se cargan los datos
@@ -532,15 +587,34 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
               </div>
 
               <div className="space-y-4">
-                <AutoDocumentUpload
+                <RobustDocumentUpload
+                  ref={(ref) => {
+                    if (ref && item.tempId) {
+                      addDocumentRef(item.tempId, ref)
+                    }
+                  }}
                   userId={userId}
                   documentType="experience_certificate"
                   formType="experience"
+                  recordId={item.id || item.tempId} // Usar tempId si no hay ID real
                   itemIndex={index}
                   label="Documento de Soporte"
                   required
+                  initialDocumentUrl={item.document_url}
                   onUploadSuccess={(url) => {
-                    console.log("Documento subido exitosamente:", url)
+                    // Guardar la URL en el item actual
+                    console.log("🔥 DOCUMENTO SUBIDO - URL recibida:", url)
+                    console.log("🔥 DOCUMENTO SUBIDO - Guardando en índice:", index)
+                    console.log("🔥 DOCUMENTO SUBIDO - Item actual antes:", items[index])
+                    
+                    handleItemChange(index, "document_url", url)
+                    
+                    // Verificar que se guardó correctamente
+                    setTimeout(() => {
+                      console.log("🔥 DOCUMENTO SUBIDO - Item después del cambio:", items[index])
+                    }, 100)
+                    
+                    console.log("Documento subido exitosamente, URL guardada en item:", url)
                   }}
                   onUploadError={(error) => {
                     console.error("Error al subir documento:", error)
