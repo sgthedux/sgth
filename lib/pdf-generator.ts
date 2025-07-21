@@ -4,108 +4,120 @@ function mm2pt(mm: number): number {
   return mm * 2.83465
 }
 
-// Añadir constante para la posición del logo
-const LOGO_POSITION = {
-  x: mm2pt(148), // Posición X aproximada donde dice "entidad receptora"
-  y: mm2pt(253), // Posición Y aproximada donde dice "entidad receptora"
-  maxWidth: mm2pt(53), // 150px convertidos a puntos (aproximadamente 53mm)
-}
-
 /* ────────────────  PÁGINA 1  ──────────────── */
 const P1 = {
   /* Datos personales */
-  primerApellido: { x: mm2pt(22), y: mm2pt(213.5) },
-  segundoApellido: { x: mm2pt(81), y: mm2pt(213.5) },
-  nombres: { x: mm2pt(140), y: mm2pt(213.5) },
+  primerApellido: { x: mm2pt(22), y: mm2pt(208.5) },
+  segundoApellido: { x: mm2pt(81), y: mm2pt(208.5) },
+  nombres: { x: mm2pt(140), y: mm2pt(208.5) },
 
   /* Documento de identificación */
-  tipoDocCC: { x: mm2pt(29), y: mm2pt(202.5) },
-  tipoDocCE: { x: mm2pt(39), y: mm2pt(202.5) },
-  tipoDocPAS: { x: mm2pt(49), y: mm2pt(202.5) },
-  numeroDocumento: { x: mm2pt(64), y: mm2pt(202.5) },
+  tipoDocCC: { x: mm2pt(29), y: mm2pt(198) },
+  tipoDocCE: { x: mm2pt(39), y: mm2pt(198) },
+  tipoDocPAS: { x: mm2pt(49), y: mm2pt(198) },
+  numeroDocumento: { x: mm2pt(64), y: mm2pt(198) },
 
   /* Libreta Militar - Coordenadas aproximadas */
-  libretaMilitarNumero: { x: mm2pt(120), y: mm2pt(192) },
-  libretaMilitarPrimera: { x: mm2pt(51), y: mm2pt(192) },
-  libretaMilitarSegunda: { x: mm2pt(91), y: mm2pt(192) },
-  libretaMilitarDistrito: { x: mm2pt(170), y: mm2pt(192) },
+  libretaMilitarNumero: { x: mm2pt(120), y: mm2pt(187) },
+  libretaMilitarPrimera: { x: mm2pt(51), y: mm2pt(187) },
+  libretaMilitarSegunda: { x: mm2pt(91), y: mm2pt(187) },
+  libretaMilitarDistrito: { x: mm2pt(173), y: mm2pt(187) },
 
   /* Sexo */
-  sexoF: { x: mm2pt(105), y: mm2pt(202.5) },
-  sexoM: { x: mm2pt(112), y: mm2pt(202.5) },
+  sexoF: { x: mm2pt(105), y: mm2pt(198) },
+  sexoM: { x: mm2pt(112), y: mm2pt(198) },
 
   /* Nacionalidad */
-  nacionalidadCol: { x: mm2pt(135.2), y: mm2pt(202.5) },
-  nacionalidadOtra: { x: mm2pt(162), y: mm2pt(202.5) },
-  nacionalidad: { x: mm2pt(145), y: mm2pt(202.5) },
-  pais: { x: mm2pt(168), y: mm2pt(202.5) },
+  nacionalidadCol: { x: mm2pt(135.2), y: mm2pt(198) },
+  nacionalidadOtra: { x: mm2pt(162), y: mm2pt(198) },
+  nacionalidad: { x: mm2pt(145), y: mm2pt(198) },
+  pais: { x: mm2pt(168), y: mm2pt(198) },
 
   /* Fecha y lugar de nacimiento */
-  fechaNacDia: { x: mm2pt(49), y: mm2pt(179) },
-  fechaNacMes: { x: mm2pt(66), y: mm2pt(179) },
-  fechaNacAnio: { x: mm2pt(86), y: mm2pt(179) },
-  paisNacimiento: { x: mm2pt(44), y: mm2pt(173) },
-  deptoNacimiento: { x: mm2pt(44), y: mm2pt(167) },
-  municipioNacimiento: { x: mm2pt(44), y: mm2pt(161) },
+  fechaNacDia: { x: mm2pt(49), y: mm2pt(174) },
+  fechaNacMes: { x: mm2pt(66), y: mm2pt(174) },
+  fechaNacAnio: { x: mm2pt(86), y: mm2pt(174) },
+  paisNacimiento: { x: mm2pt(44), y: mm2pt(168) },
+  deptoNacimiento: { x: mm2pt(44), y: mm2pt(162) },
+  municipioNacimiento: { x: mm2pt(44), y: mm2pt(156) },
 
   /* Dirección y contacto */
-  direccion: { x: mm2pt(105), y: mm2pt(179) },
-  telefono: { x: mm2pt(121), y: mm2pt(161) },
-  email: { x: mm2pt(154), y: mm2pt(161) },
-  paisResidencia: { x: mm2pt(111), y: mm2pt(173) },
-  deptoResidencia: { x: mm2pt(168), y: mm2pt(173) },
-  municipioResidencia: { x: mm2pt(121), y: mm2pt(167) },
+  direccion: { x: mm2pt(105), y: mm2pt(178) },
+  telefono: { x: mm2pt(121), y: mm2pt(162) },
+  email: { x: mm2pt(110), y: mm2pt(156) },  
+  deptoResidencia: { x: mm2pt(118), y: mm2pt(173) },
+  municipioResidencia: { x: mm2pt(131), y: mm2pt(167) },
 
   /* Educación básica */
-  nivelPrimaria: { x: mm2pt(140), y: mm2pt(123) },
-  nivelSecundaria: { x: mm2pt(140), y: mm2pt(123) },
-  nivelMedia: { x: mm2pt(140), y: mm2pt(123) },
-  tituloBachiller: { x: mm2pt(140), y: mm2pt(123) },
-  fechaGradoMes: { x: mm2pt(125), y: mm2pt(112) },
-  fechaGradoAnio: { x: mm2pt(148), y: mm2pt(112) },
+  nivelPrimaria: { x: mm2pt(140), y: mm2pt(120) },
+  nivelSecundaria: { x: mm2pt(140), y: mm2pt(120) },
+  nivelMedia: { x: mm2pt(140), y: mm2pt(120) },
+  tituloBachiller: { x: mm2pt(140), y: mm2pt(119) },
+  fechaGradoMes: { x: mm2pt(125), y: mm2pt(108.5) },
+  fechaGradoAnio: { x: mm2pt(148), y: mm2pt(108.5) },
 
   /* Educación superior 1 */
-  modalidadAcademica1: { x: mm2pt(22), y: mm2pt(70) },
-  semestresAprobados1: { x: mm2pt(44), y: mm2pt(70) },
-  graduadoSi1: { x: mm2pt(65), y: mm2pt(70) },
-  graduadoNo1: { x: mm2pt(70), y: mm2pt(70) },
-  tituloObtenido1: { x: mm2pt(80), y: mm2pt(70) },
-  fechaTerminacionMes1: { x: mm2pt(152), y: mm2pt(70) },
-  fechaTerminacionAnio1: { x: mm2pt(160), y: mm2pt(70) },
-  tarjetaProfesional1: { x: mm2pt(175), y: mm2pt(70) },
+  modalidadAcademica1: { x: mm2pt(22), y: mm2pt(65.5) },
+  semestresAprobados1: { x: mm2pt(44), y: mm2pt(65.5) },
+  graduadoSi1: { x: mm2pt(65), y: mm2pt(65.5) },
+  graduadoNo1: { x: mm2pt(70), y: mm2pt(65.5) },
+  tituloObtenido1: { x: mm2pt(80), y: mm2pt(65.5) },
+  fechaTerminacionMes1: { x: mm2pt(152), y: mm2pt(65.5) },
+  fechaTerminacionAnio1: { x: mm2pt(160), y: mm2pt(65.5) },
+  tarjetaProfesional1: { x: mm2pt(175), y: mm2pt(65.5) },
 
   /* Educación superior 2 */
-  modalidadAcademica2: { x: mm2pt(22), y: mm2pt(64) },
-  semestresAprobados2: { x: mm2pt(44), y: mm2pt(64) },
-  graduadoSi2: { x: mm2pt(65), y: mm2pt(64) },
-  graduadoNo2: { x: mm2pt(70), y: mm2pt(64) },
-  tituloObtenido2: { x: mm2pt(80), y: mm2pt(64) },
-  fechaTerminacionMes2: { x: mm2pt(152), y: mm2pt(64) },
-  fechaTerminacionAnio2: { x: mm2pt(160), y: mm2pt(64) },
-  tarjetaProfesional2: { x: mm2pt(175), y: mm2pt(64) },
+  modalidadAcademica2: { x: mm2pt(22), y: mm2pt(60) },
+  semestresAprobados2: { x: mm2pt(44), y: mm2pt(60) },
+  graduadoSi2: { x: mm2pt(65), y: mm2pt(60) },
+  graduadoNo2: { x: mm2pt(70), y: mm2pt(60) },
+  tituloObtenido2: { x: mm2pt(80), y: mm2pt(60) },
+  fechaTerminacionMes2: { x: mm2pt(152), y: mm2pt(60) },
+  fechaTerminacionAnio2: { x: mm2pt(160), y: mm2pt(60) },
+  tarjetaProfesional2: { x: mm2pt(175), y: mm2pt(60) },
+
+  /* Educación superior 3 */
+  modalidadAcademica3: { x: mm2pt(22), y: mm2pt(54.5) },
+  semestresAprobados3: { x: mm2pt(44), y: mm2pt(54.5) },
+  graduadoSi3: { x: mm2pt(65), y: mm2pt(54.5) },
+  graduadoNo3: { x: mm2pt(70), y: mm2pt(54.5) },
+  tituloObtenido3: { x: mm2pt(80), y: mm2pt(54.5) },
+  fechaTerminacionMes3: { x: mm2pt(152), y: mm2pt(54.5) },
+  fechaTerminacionAnio3: { x: mm2pt(160), y: mm2pt(54.5) },
+  tarjetaProfesional3: { x: mm2pt(175), y: mm2pt(54.5) },
+
+  /* Educación superior 4 */
+  modalidadAcademica4: { x: mm2pt(22), y: mm2pt(49) },
+  semestresAprobados4: { x: mm2pt(44), y: mm2pt(49) },
+  graduadoSi4: { x: mm2pt(65), y: mm2pt(49) },
+  graduadoNo4: { x: mm2pt(70), y: mm2pt(49) },
+  tituloObtenido4: { x: mm2pt(80), y: mm2pt(49) },
+  fechaTerminacionMes4: { x: mm2pt(152), y: mm2pt(49) },
+  fechaTerminacionAnio4: { x: mm2pt(160), y: mm2pt(49) },
+  tarjetaProfesional4: { x: mm2pt(175), y: mm2pt(49) },
 
   /* Idiomas */
-  idioma1: { x: mm2pt(65), y: mm2pt(25) },
-  habla1R: { x: mm2pt(107), y: mm2pt(25) },
-  habla1B: { x: mm2pt(113.5), y: mm2pt(25) },
-  habla1MB: { x: mm2pt(119.5), y: mm2pt(25) },
-  lee1R: { x: mm2pt(124), y: mm2pt(25) },
-  lee1B: { x: mm2pt(130), y: mm2pt(25) },
-  lee1MB: { x: mm2pt(136), y: mm2pt(25) },
-  escribe1R: { x: mm2pt(142.5), y: mm2pt(25) },
-  escribe1B: { x: mm2pt(148.5), y: mm2pt(25) },
-  escribe1MB: { x: mm2pt(154.5), y: mm2pt(25) },
+  idioma1: { x: mm2pt(65), y: mm2pt(21) },
+  habla1R: { x: mm2pt(107), y: mm2pt(21) },
+  habla1B: { x: mm2pt(113.5), y: mm2pt(21) },
+  habla1MB: { x: mm2pt(119.5), y: mm2pt(21) },
+  lee1R: { x: mm2pt(124), y: mm2pt(21) },
+  lee1B: { x: mm2pt(130), y: mm2pt(21) },
+  lee1MB: { x: mm2pt(136), y: mm2pt(21) },
+  escribe1R: { x: mm2pt(142.5), y: mm2pt(21) },
+  escribe1B: { x: mm2pt(148.5), y: mm2pt(21) },
+  escribe1MB: { x: mm2pt(154.5), y: mm2pt(21) },
 
-  idioma2: { x: mm2pt(65), y: mm2pt(19) },
-  habla2R: { x: mm2pt(107), y: mm2pt(19) },
-  habla2B: { x: mm2pt(113.5), y: mm2pt(19) },
-  habla2MB: { x: mm2pt(119.5), y: mm2pt(19) },
-  lee2R: { x: mm2pt(124), y: mm2pt(19) },
-  lee2B: { x: mm2pt(130), y: mm2pt(19) },
-  lee2MB: { x: mm2pt(136), y: mm2pt(19) },
-  escribe2R: { x: mm2pt(142.5), y: mm2pt(19) },
-  escribe2B: { x: mm2pt(148.5), y: mm2pt(19) },
-  escribe2MB: { x: mm2pt(154.5), y: mm2pt(19) },
+  idioma2: { x: mm2pt(65), y: mm2pt(15) },
+  habla2R: { x: mm2pt(107), y: mm2pt(15) },
+  habla2B: { x: mm2pt(113.5), y: mm2pt(15) },
+  habla2MB: { x: mm2pt(119.5), y: mm2pt(15) },
+  lee2R: { x: mm2pt(124), y: mm2pt(15) },
+  lee2B: { x: mm2pt(130), y: mm2pt(15) },
+  lee2MB: { x: mm2pt(136), y: mm2pt(15) },
+  escribe2R: { x: mm2pt(142.5), y: mm2pt(15) },
+  escribe2B: { x: mm2pt(148.5), y: mm2pt(15) },
+  escribe2MB: { x: mm2pt(154.5), y: mm2pt(15) },
 }
 
 /* ────────────────  PÁGINA 2  ──────────────── */
@@ -153,7 +165,7 @@ const P3 = {
 export async function generatePdf(userData: any, educationData: any[], experienceData: any[], languagesData: any[]) {
   try {
     // Descargar el template desde la URL proporcionada
-    const templateUrl = "https://pub-373d5369059842f8abf123c212109054.r2.dev/template.pdf"
+    const templateUrl = "https://pub-373d5369059842f8abf123c212109054.r2.dev/hoja_de_vida.pdf"
     const templateResponse = await fetch(templateUrl)
     const templateBytes = await templateResponse.arrayBuffer()
 
@@ -163,43 +175,6 @@ export async function generatePdf(userData: any, educationData: any[], experienc
     const page1 = pages[0]
     const page2 = pages[1]
     const page3 = pages[2]
-
-    // Cargar el logo
-    try {
-      // Usar la URL del dominio para obtener el logo
-      const logoUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/images/logo.png`
-      const logoResponse = await fetch(logoUrl)
-      if (!logoResponse.ok) {
-        throw new Error(`Error al cargar el logo: ${logoResponse.status}`)
-      }
-
-      const logoBytes = await logoResponse.arrayBuffer()
-      const logoImage = await pdfDoc.embedPng(logoBytes)
-
-      // Calcular dimensiones manteniendo la proporción
-      const { width, height } = logoImage.scale(1)
-      let scaleFactor = 1
-
-      if (width > LOGO_POSITION.maxWidth) {
-        scaleFactor = LOGO_POSITION.maxWidth / width
-      }
-
-      const scaledWidth = width * scaleFactor
-      const scaledHeight = height * scaleFactor
-
-      // Insertar el logo en la primera página
-      page1.drawImage(logoImage, {
-        x: LOGO_POSITION.x,
-        y: LOGO_POSITION.y - scaledHeight, // Ajustar Y para que la imagen se dibuje hacia abajo desde el punto de referencia
-        width: scaledWidth,
-        height: scaledHeight,
-      })
-
-      console.log("Logo insertado correctamente en el PDF")
-    } catch (logoError) {
-      console.error("Error al procesar el logo:", logoError)
-      // Continuar con la generación del PDF sin el logo
-    }
 
     // Configurar la fuente
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
@@ -462,6 +437,72 @@ export async function generatePdf(userData: any, educationData: any[], experienc
         // Tarjeta profesional
         drawText(edu2.professional_card || edu2.professional_card_number || "", P1.tarjetaProfesional2, page1)
       }
+
+      // Tercera educación superior
+      if (higherEducation.length > 2) {
+        const edu3 = higherEducation[2]
+
+        // Modalidad académica - Usar el campo academic_modality si existe
+        const modalidad = edu3.academic_modality || getModalidadAcademica(edu3.education_level)
+        drawText(modalidad, P1.modalidadAcademica3, page1)
+
+        // Semestres aprobados
+        drawText(
+          edu3.semesters?.toString() || edu3.semesters_completed?.toString() || "",
+          P1.semestresAprobados3,
+          page1,
+        )
+
+        // Graduado
+        markCheckbox(edu3.graduated === true, P1.graduadoSi3, page1)
+        markCheckbox(edu3.graduated === false, P1.graduadoNo3, page1)
+
+        // Título obtenido
+        drawText(edu3.title || edu3.degree || "", P1.tituloObtenido3, page1)
+
+        // Fecha de terminación
+        if (edu3.end_date || edu3.graduation_date) {
+          const endDate = new Date(edu3.end_date || edu3.graduation_date)
+          drawText((endDate.getMonth() + 1).toString().padStart(2, "0"), P1.fechaTerminacionMes3, page1)
+          drawText(endDate.getFullYear().toString(), P1.fechaTerminacionAnio3, page1)
+        }
+
+        // Tarjeta profesional
+        drawText(edu3.professional_card || edu3.professional_card_number || "", P1.tarjetaProfesional3, page1)
+      }
+
+      // Cuarta educación superior
+      if (higherEducation.length > 3) {
+        const edu4 = higherEducation[3]
+
+        // Modalidad académica - Usar el campo academic_modality si existe
+        const modalidad = edu4.academic_modality || getModalidadAcademica(edu4.education_level)
+        drawText(modalidad, P1.modalidadAcademica4, page1)
+
+        // Semestres aprobados
+        drawText(
+          edu4.semesters?.toString() || edu4.semesters_completed?.toString() || "",
+          P1.semestresAprobados4,
+          page1,
+        )
+
+        // Graduado
+        markCheckbox(edu4.graduated === true, P1.graduadoSi4, page1)
+        markCheckbox(edu4.graduated === false, P1.graduadoNo4, page1)
+
+        // Título obtenido
+        drawText(edu4.title || edu4.degree || "", P1.tituloObtenido4, page1)
+
+        // Fecha de terminación
+        if (edu4.end_date || edu4.graduation_date) {
+          const endDate = new Date(edu4.end_date || edu4.graduation_date)
+          drawText((endDate.getMonth() + 1).toString().padStart(2, "0"), P1.fechaTerminacionMes4, page1)
+          drawText(endDate.getFullYear().toString(), P1.fechaTerminacionAnio4, page1)
+        }
+
+        // Tarjeta profesional
+        drawText(edu4.professional_card || edu4.professional_card_number || "", P1.tarjetaProfesional4, page1)
+      }
     }
 
     // Llenar idiomas
@@ -609,14 +650,6 @@ export async function generatePdf(userData: any, educationData: any[], experienc
         drawText(totalExperience.months.toString(), P3.mesesExperienciaTotal, page3)
       }
 
-      // Escribir tiempo total en página 3 (campos originales)
-      drawText(totalExperience.years.toString(), P3.aniosExperiencia, page3)
-      drawText(totalExperience.months.toString(), P3.mesesExperiencia, page3)
-
-      // Repetir tiempo total en segunda sección
-      drawText(totalExperience.years.toString(), P3.aniosExperiencia2, page3)
-      drawText(totalExperience.months.toString(), P3.mesesExperiencia2, page3)
-
       // Marcar tipo de ocupación
       let hasPublic = false
       let hasPrivate = false
@@ -628,10 +661,6 @@ export async function generatePdf(userData: any, educationData: any[], experienc
         else if (sector.toLowerCase() === "private") hasPrivate = true
         else if (sector.toLowerCase() === "independent") hasIndependent = true
       })
-
-      markCheckbox(hasPublic, P3.ocupacionPublica, page3)
-      markCheckbox(hasPrivate, P3.ocupacionPrivada, page3)
-      markCheckbox(hasIndependent, P3.ocupacionIndependiente, page3)
 
       // Fecha de diligenciamiento
       const today = new Date()
