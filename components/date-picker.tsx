@@ -35,9 +35,18 @@ export function DatePicker({
   useEffect(() => {
     if (value) {
       try {
-        const date = new Date(value)
-        if (!isNaN(date.getTime())) {
-          setInputValue(format(date, "yyyy-MM-dd"))
+        // Si el valor ya está en formato YYYY-MM-DD, usarlo directamente
+        if (value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          setInputValue(value)
+        } else {
+          // Si es ISO string, convertir usando UTC para evitar problemas de zona horaria
+          const date = new Date(value)
+          if (!isNaN(date.getTime())) {
+            const year = date.getUTCFullYear()
+            const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+            const day = String(date.getUTCDate()).padStart(2, '0')
+            setInputValue(`${year}-${month}-${day}`)
+          }
         }
       } catch (error) {
         console.error("Error formatting date:", error)
@@ -53,8 +62,9 @@ export function DatePicker({
 
     if (newValue) {
       try {
-        // Convertir de YYYY-MM-DD a ISO
-        const date = parse(newValue, "yyyy-MM-dd", new Date())
+        // Crear fecha usando UTC para evitar problemas de zona horaria
+        const [year, month, day] = newValue.split('-').map(Number)
+        const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0))
         onChange(date.toISOString())
       } catch (error) {
         console.error("Error parsing date:", error)

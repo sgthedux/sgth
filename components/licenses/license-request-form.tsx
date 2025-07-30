@@ -552,7 +552,17 @@ export function LicenseRequestForm({
                 id="fecha_inicio"
                 type="date"
                 value={formData.fecha_inicio}
-                onChange={(e) => handleInputChange("fecha_inicio", e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value
+                  if (value) {
+                    // Crear fecha directamente desde YYYY-MM-DD sin conversión de zona horaria
+                    const [year, month, day] = value.split('-').map(Number)
+                    const date = new Date(year, month - 1, day, 12, 0, 0)
+                    handleInputChange("fecha_inicio", date.toISOString().split('T')[0])
+                  } else {
+                    handleInputChange("fecha_inicio", value)
+                  }
+                }}
                 className={errors.fecha_inicio ? "border-red-500" : ""}
               />
               {errors.fecha_inicio && <p className="text-sm text-red-500">{errors.fecha_inicio}</p>}
@@ -566,7 +576,17 @@ export function LicenseRequestForm({
                 id="fecha_finalizacion"
                 type="date"
                 value={formData.fecha_finalizacion}
-                onChange={(e) => handleInputChange("fecha_finalizacion", e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value
+                  if (value) {
+                    // Crear fecha directamente desde YYYY-MM-DD sin conversión de zona horaria
+                    const [year, month, day] = value.split('-').map(Number)
+                    const date = new Date(year, month - 1, day, 12, 0, 0)
+                    handleInputChange("fecha_finalizacion", date.toISOString().split('T')[0])
+                  } else {
+                    handleInputChange("fecha_finalizacion", value)
+                  }
+                }}
                 className={errors.fecha_finalizacion ? "border-red-500" : ""}
               />
               {errors.fecha_finalizacion && <p className="text-sm text-red-500">{errors.fecha_finalizacion}</p>}
@@ -612,7 +632,17 @@ export function LicenseRequestForm({
               id="fecha_compensacion"
               type="date"
               value={formData.fecha_compensacion}
-              onChange={(e) => handleInputChange("fecha_compensacion", e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value
+                if (value) {
+                  // Crear fecha directamente desde YYYY-MM-DD sin conversión de zona horaria
+                  const [year, month, day] = value.split('-').map(Number)
+                  const date = new Date(year, month - 1, day, 12, 0, 0)
+                  handleInputChange("fecha_compensacion", date.toISOString().split('T')[0])
+                } else {
+                  handleInputChange("fecha_compensacion", value)
+                }
+              }}
             />
           </div>
 
