@@ -350,7 +350,11 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-6">
-          {items.map((item, index) => (
+          {items.map((item, index) => {
+            // Crear documentType único para cada registro de idioma
+            const documentType = `language_${item.id || item.tempId || index}`
+            
+            return (
             <div key={index} className="space-y-4 p-4 border rounded-lg">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium">Idioma {index + 1}</h3>
@@ -363,7 +367,7 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
                     tableName="languages"
                     itemId={item.id}
                     userId={userId}
-                    documentKey={`${userId}/language_${index}`}
+                    documentKey={`${userId}/language_${item.id || item.tempId || index}`}
                     onSuccess={() => {
                       notifications.success.delete(`Idioma ${index + 1}`)
                     }}
@@ -484,7 +488,7 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
                     formType="language"
                     recordId={item.id || item.tempId} // Usar tempId si no hay ID real
                     itemIndex={index}
-                    documentType="language_certificate"
+                    documentType={documentType} // Usar el documentType único creado arriba
                     label="Certificado de Idioma (Opcional)"
                     initialDocumentUrl={item.document_url}
                     onUploadSuccess={(documentUrl) => handleDocumentUpload(index, documentUrl)}
@@ -492,7 +496,8 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
                 </div>
               </div>
             </div>
-          ))}
+            )
+          })}
 
           <Button
             type="button"

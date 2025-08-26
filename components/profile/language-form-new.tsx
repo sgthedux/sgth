@@ -234,7 +234,11 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-6">
-          {items.map((item, index) => (
+          {items.map((item, index) => {
+            // Crear documentType único para cada registro de idioma
+            const documentType = `language_${item.id || item.tempId || index}`
+            
+            return (
             <div key={index} className="space-y-4 p-4 border rounded-lg">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium">Idioma {index + 1}</h3>
@@ -247,7 +251,7 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
                     tableName="languages"
                     itemId={item.id}
                     userId={userId}
-                    documentKey={`${userId}/language_${index}`}
+                    documentKey={`${userId}/language_${item.id || item.tempId || index}`}
                     onSuccess={() => {
                       notifications.success.delete(`Idioma ${index + 1}`)
                     }}
@@ -360,8 +364,8 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
                   <Label className="text-sm font-medium">Certificado de Idioma (Opcional)</Label>
                   <AutoDocumentUpload
                     userId={userId}
-                    documentKey={`${userId}/language_${index}`}
-                    documentType="language_certificate"
+                    documentKey={`${userId}/${documentType}`}
+                    documentType={documentType}
                     accept=".pdf,.jpg,.jpeg,.png"
                     maxSize={5}
                     description="Suba certificados de idiomas como TOEFL, IELTS, DELE, etc."
@@ -369,7 +373,8 @@ export function LanguageForm({ userId, languages = [] }: LanguageFormProps) {
                 </div>
               </div>
             </div>
-          ))}
+            )
+          })}
 
           <Button
             type="button"

@@ -279,24 +279,25 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
     }
   }
 
-  // Función para guardar cada elemento individualmente y evitar duplicación
+  // Función para guardar cada elemento individualmente y permitir múltiples registros
   const saveEducationDataIndividually = async (educationItems: any[]) => {
     const savedItems = []
     
     for (const item of educationItems) {
-      // Verificar si ya existe un elemento con la misma institución, título y tipo
-      const { data: existingEducation, error: checkError } = await supabase
-        .from("education")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("institution", item.institution.trim())
-        .eq("degree", item.degree.trim())
-        .eq("education_type", item.education_type)
-        .single()
+      // Solo verificar si el item ya tiene un ID (registro existente)
+      let existingEducation = null
+      if (item.id) {
+        const { data, error: checkError } = await supabase
+          .from("education")
+          .select("*")
+          .eq("id", item.id)
+          .single()
 
-      if (checkError && checkError.code !== "PGRST116") {
-        console.error("Error checking existing education:", checkError)
-        continue
+        if (checkError && checkError.code !== "PGRST116") {
+          console.error("Error checking existing education:", checkError)
+          continue
+        }
+        existingEducation = data
       }
 
       // Preparar datos limpios
@@ -573,7 +574,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
               {basicEducationItems.map((item, index) => {
                 const itemIndex = items.findIndex((i) => i === item)
                 // Crear un identificador único para este documento específico
-                const documentType = `education_basic_${index}`
+                const documentType = `education_basic_${item.id || item.tempId}`
 
                 return (
                   <div key={index} className="space-y-4 p-4 border rounded-lg">
@@ -588,7 +589,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                           tableName="education"
                           itemId={item.id}
                           userId={userId}
-                          documentKey={`${userId}/education_basic_${index}`}
+                          documentKey={`${userId}/education_basic_${item.id || item.tempId}`}
                           onSuccess={() => {
                             notifications.success.delete(`Educación básica ${index + 1}`)
                           }}
@@ -694,7 +695,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                           }
                         }}
                         userId={userId}
-                        documentType="basic_education_certificate"
+                        documentType={documentType} // Usar el documentType único creado arriba
                         formType="education"
                         recordId={item.id || item.tempId} // Usar tempId si no hay ID real
                         itemIndex={itemIndex} // Usar itemIndex (índice real) no index (índice del filtro)
@@ -738,7 +739,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
               {higherEducationItems.map((item, index) => {
                 const itemIndex = items.findIndex((i) => i === item)
                 // Crear un identificador único para este documento específico
-                const documentType = `education_higher_${index}`
+                const documentType = `education_higher_${item.id || item.tempId}`
 
                 return (
                   <div key={index} className="space-y-4 p-4 border rounded-lg">
@@ -753,7 +754,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                           tableName="education"
                           itemId={item.id}
                           userId={userId}
-                          documentKey={`${userId}/education_higher_${index}`}
+                          documentKey={`${userId}/education_higher_${item.id || item.tempId}`}
                           onSuccess={() => {
                             notifications.success.delete(`Educación superior ${index + 1}`)
                           }}
@@ -986,7 +987,7 @@ export function EducationForm({ userId, educations = [] }: EducationFormProps) {
                           }
                         }}
                         userId={userId}
-                        documentType="higher_education_diploma"
+                        documentType={documentType} // Usar el documentType único creado arriba
                         formType="education"
                         recordId={item.id || item.tempId} // Usar tempId si no hay ID real
                         itemIndex={itemIndex} // Usar itemIndex (índice real) no index (índice del filtro)

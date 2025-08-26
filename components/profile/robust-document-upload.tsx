@@ -113,21 +113,9 @@ export const RobustDocumentUpload = forwardRef<
       return recordId
     }
     
-    if (formType === "education") {
-      if (documentType === "basic_education_certificate") {
-        return `basic_${recordId}`
-      } else if (documentType === "higher_education_diploma") {
-        return `higher_${recordId}`
-      } else {
-        return `${formType}_${recordId}`
-      }
-    } else if (formType === "experience") {
-      return `experience_${recordId}`
-    } else if (formType === "language") {
-      return `language_${recordId}`
-    }
-    
-    return `${formType}_${recordId}`
+    // Usar el documentType dinámico directamente para generar un itemId único
+    // Esto asegura que cada registro tenga su propio identificador único
+    return `${documentType}_${recordId}`
   }, [recordId, formType, documentType])
 
   useEffect(() => {
@@ -167,7 +155,6 @@ export const RobustDocumentUpload = forwardRef<
         const queryParams = new URLSearchParams({
           userId,
           documentType,
-          formType,
           itemId
         })
 
@@ -182,9 +169,33 @@ export const RobustDocumentUpload = forwardRef<
           
           if (data.exists && data.url) {
             setUploadedUrl(data.url)
-            setDocumentName(data.name || 'Documento subido')
+            // Mejorar el nombre del documento para ser más específico
+            let displayName = data.name || 'Documento existente'
+            
+            // Si no hay nombre específico, generar uno basado en el tipo de documento
+            if (!data.name || data.name === 'Documento existente') {
+              const documentTypeNames: Record<string, string> = {
+                'basic_education_certificate': 'Certificado de Educación Básica',
+                'high_school_diploma': 'Diploma de Bachillerato',
+                'higher_education_diploma': 'Diploma de Educación Superior',
+                'experience_certificate': 'Certificado de Experiencia',
+                'language_certificate': 'Certificado de Idioma',
+                'cv_signed': 'CV Firmado',
+                'identity_document': 'Documento de Identidad'
+              }
+              
+              displayName = documentTypeNames[documentType] || `Documento ${documentType}`
+              
+              // Agregar información del registro si está disponible
+              if (recordId && typeof recordId === 'string' && recordId.length > 10) {
+                const shortId = recordId.substring(recordId.length - 6)
+                displayName += ` (${shortId})`
+              }
+            }
+            
+            setDocumentName(displayName)
             setSuccess(true)
-            console.log("Documento existente encontrado:", data.url)
+            console.log("Documento existente encontrado:", data.url, "con nombre:", displayName)
           }
           
           // Actualizar el último recordId consultado
@@ -239,71 +250,84 @@ export const RobustDocumentUpload = forwardRef<
         })
       }, 200)
 
-      // SOLUCIÓN SIMPLE: Usar el mismo sistema que DocumentUpload
+      // Generar itemId consistente usando la función generateItemId
+      let itemId: string
+      
       if (!recordId) {
-        // Subir usando el API que SÍ funciona
-        const formData = new FormData()
-        formData.append("file", fileToUpload)
-        formData.append("userId", userId)
-        formData.append("category", documentType)
-        formData.append("itemId", `${formType}_${itemIndex}`)
-
-        const response = await fetch("/api/upload-direct", {
-          method: "POST",
-          body: formData,
-        })
-
-        clearInterval(progressInterval)
-        setProgress(100)
-
-        const result = await response.json()
-
-        if (!response.ok) {
-          throw new Error(result.error || "Error al subir el archivo")
-        }
-
-        // Guardar la URL en el estado local para asociarla después
-        setUploadedUrl(result.url)
-        setDocumentName(fileToUpload.name)
-        setSuccess(true)
-        
-        // Notificar al formulario padre con la URL
-        if (onUploadSuccess) {
-          onUploadSuccess(result.url)
-        }
-
-        console.log("Documento subido correctamente:", result.url)
-
+        // Para nuevos items sin recordId, usar itemIndex como fallback
+        itemId = `${formType}_${itemIndex}`
       } else {
-        // Si hay recordId, usar el sistema existente (ya funciona)
-        const formData = new FormData()
-        formData.append("file", fileToUpload)
-        formData.append("userId", userId)
-        formData.append("category", documentType)
-        formData.append("itemId", `${formType}_${recordId}`)
+        // Para items existentes, usar generateItemId para consistencia
+        const generatedId = generateItemId()
+        if (!generatedId) {
+          throw new Error('No se pudo generar itemId válido')
+        }
+        itemId = generatedId
+      }
 
-        const response = await fetch("/api/upload-direct", {
-          method: "POST",
-          body: formData,
-        })
+      console.log("Subiendo archivo con itemId:", itemId, "recordId:", recordId, "formType:", formType, "documentType:", documentType)
 
-        clearInterval(progressInterval)
-        setProgress(100)
+      const formData = new FormData()
+      formData.append("file", fileToUpload)
+      formData.append("userId", userId)
+      formData.append("category", documentType)
+      formData.append("itemId", itemId)
 
-        const result = await response.json()
+      const response = await fetch("/api/upload-direct", {
+        method: "POST",
+        body: formData,
+      })
 
-        if (!response.ok) {
-          throw new Error(result.error || "Error al subir el archivo")
+      clearInterval(progressInterval)
+      setProgress(100)
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Error al subir el archivo")
+      }
+
+      // Guardar la URL en el estado local
+      setUploadedUrl(result.url)
+      
+      // Mejorar el nombre del documento para ser más específico
+      let displayName = result.document?.name || fileToUpload.name || 'Archivo subido'
+      
+      // Si el nombre del archivo no es descriptivo, usar el tipo de documento
+      if (!result.document?.name && fileToUpload.name) {
+        const documentTypeNames: Record<string, string> = {
+          'basic_education_certificate': 'Certificado de Educación Básica',
+          'high_school_diploma': 'Diploma de Bachillerato', 
+          'higher_education_diploma': 'Diploma de Educación Superior',
+          'experience_certificate': 'Certificado de Experiencia',
+          'language_certificate': 'Certificado de Idioma',
+          'cv_signed': 'CV Firmado',
+          'identity_document': 'Documento de Identidad'
         }
         
-        setUploadedUrl(result.url)
-        setDocumentName(result.document?.name || fileToUpload.name || 'Archivo subido')
-        setSuccess(true)
-        
-        if (onUploadSuccess) {
-          onUploadSuccess(result.url)
+        const typeName = documentTypeNames[documentType]
+        if (typeName) {
+          // Mantener la extensión del archivo original
+          const fileExtension = fileToUpload.name.split('.').pop()
+          displayName = `${typeName}.${fileExtension}`
+          
+          // Agregar información del registro si está disponible
+          if (recordId && typeof recordId === 'string' && recordId.length > 10) {
+            const shortId = recordId.substring(recordId.length - 6)
+            displayName = `${typeName} (${shortId}).${fileExtension}`
+          }
         }
       }
+      
+      setDocumentName(displayName)
+      setSuccess(true)
+      
+      // Notificar al formulario padre con la URL
+      if (onUploadSuccess) {
+        onUploadSuccess(result.url)
+      }
+
+      console.log("Documento subido correctamente con itemId:", itemId, "URL:", result.url)
 
     } catch (error: any) {
       console.error("Error al subir archivo:", error)

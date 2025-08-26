@@ -398,25 +398,29 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-6">
-          {items.map((item, index) => (
+          {items.map((item, index) => {
+            // Crear documentType único para cada registro de experiencia
+            const documentType = `experience_${item.id || item.tempId || index}`
+            
+            return (
             <div key={index} className="space-y-4 p-4 border rounded-lg">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium">Experiencia {index + 1}</h3>
                 {items.length > 1 && (
                   <DeleteConfirmation
                     onDelete={() => handleRemoveItem(index)}
-                    itemName="experiencia laboral"
+                    itemName="experiencia"
                     buttonSize="sm"
                     variant="ghost"
                     tableName="experience"
                     itemId={item.id}
                     userId={userId}
-                    documentKey={`${userId}/experience_${index}`}
+                    documentKey={`${userId}/experience_${item.id || item.tempId || index}`}
                     onSuccess={() => {
                       notifications.success.delete(`Experiencia ${index + 1}`)
                     }}
                     onError={(error) => {
-                      notifications.error.delete("experiencia laboral", error.message)
+                      notifications.error.delete("experiencia", error.message)
                     }}
                   />
                 )}
@@ -601,7 +605,7 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
                     }
                   }}
                   userId={userId}
-                  documentType="experience_certificate"
+                  documentType={documentType} // Usar el documentType único creado arriba
                   formType="experience"
                   recordId={item.id || item.tempId} // Usar tempId si no hay ID real
                   itemIndex={index}
@@ -629,7 +633,8 @@ export function ExperienceForm({ userId, experiences = [] }: ExperienceFormProps
                 />
               </div>
             </div>
-          ))}
+            )
+          })}
 
           <Button type="button" variant="outline" className="w-full" onClick={handleAddItem}>
             <Plus className="h-4 w-4 mr-2" /> Agregar Experiencia
